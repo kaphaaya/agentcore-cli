@@ -174,7 +174,7 @@ export function AddMcpToolScreen({
           <TextInput
             key={wizard.step}
             prompt={MCP_TOOL_STEP_LABELS[wizard.step]}
-            initialValue={generateUniqueName('my-tool', existingToolNames, { separator: '-' })}
+            initialValue={generateUniqueName('mytool', existingToolNames)}
             onSubmit={wizard.setName}
             onCancel={() => (wizard.currentIndex === 0 ? onExit() : wizard.goBack())}
             schema={ToolNameSchema}
