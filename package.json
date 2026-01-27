@@ -27,7 +27,8 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepare": "husky"
   },
   "dependencies": {
     "@aws-cdk/toolkit-lib": "^1.13.0",
@@ -55,8 +56,6 @@
     "constructs": "^10.0.0"
   },
   "devDependencies": {
-    "aws-cdk-lib": "^2.234.1",
-    "constructs": "^10.4.4",
     "@eslint/js": "^9.39.2",
     "@trivago/prettier-plugin-sort-imports": "6.0.0",
     "@types/bun": "^1.2.14",
@@ -64,6 +63,8 @@
     "@types/react": "^19.2.7",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
+    "aws-cdk-lib": "^2.234.1",
+    "constructs": "^10.4.4",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
@@ -71,6 +72,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.26",
+    "husky": "^9.1.7",
     "prettier": "^3.7.4",
     "typescript": "^5",
     "typescript-eslint": "^8.50.1"

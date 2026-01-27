@@ -26,16 +26,16 @@ agentcore-cli invoke
 
 ## Commands
 
-| Command   | Description                      |
-| --------- | -------------------------------- |
-| `create`  | Create a new AgentCore project   |
-| `deploy`  | Deploy infrastructure to AWS     |
-| `status`  | Check deployment status          |
-| `invoke`  | Invoke a deployed agent          |
-| `dev`     | Start local development server   |
-| `add`     | Add agents, memory, identity     |
-| `remove`  | Remove resources                 |
-| `plan`    | Preview infrastructure changes   |
+| Command  | Description                    |
+| -------- | ------------------------------ |
+| `create` | Create a new AgentCore project |
+| `deploy` | Deploy infrastructure to AWS   |
+| `status` | Check deployment status        |
+| `invoke` | Invoke a deployed agent        |
+| `dev`    | Start local development server |
+| `add`    | Add agents, memory, identity   |
+| `remove` | Remove resources               |
+| `plan`   | Preview infrastructure changes |
 
 ## Configuration
 
@@ -50,7 +50,7 @@ Projects use JSON schema files in the `agentcore/` directory:
 The CLI also exports utilities for programmatic use:
 
 ```typescript
-import { ConfigIO, type AgentEnvSpec } from '@aws/agentcore-cli';
+import { type AgentEnvSpec, ConfigIO } from '@aws/agentcore-cli';
 
 const configIO = new ConfigIO({ baseDir: './agentcore' });
 const spec = await configIO.readProjectSpec();
