@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "autogen-agentchat >= 0.7.5",
     "autogen-ext[mcp] >= 0.7.5",
+    "aws-opentelemetry-distro==0.12.2",
     "bedrock-agentcore >= 1.0.3",
     "python-dotenv >= 1.0.1",
     "tiktoken",
