@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('add identity command', () => {
   let testDir: string;
@@ -25,47 +25,29 @@ describe('add identity command', () => {
     projectDir = join(testDir, projectName);
 
     // Add owner agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        ownerAgent,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', ownerAgent,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create owner agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add user agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        userAgent,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', userAgent,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create user agent: ${result.stdout} ${result.stderr}`);
     }
@@ -85,7 +67,11 @@ describe('add identity command', () => {
     });
 
     it('requires type flag', async () => {
-      const result = await runCLI(['add', 'identity', '--name', 'test', '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'identity',
+        '--name', 'test',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -93,10 +79,14 @@ describe('add identity command', () => {
     });
 
     it('validates type value', async () => {
-      const result = await runCLI(
-        ['add', 'identity', '--name', 'test', '--type', 'Invalid', '--api-key', 'xxx', '--owner', ownerAgent, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'identity',
+        '--name', 'test',
+        '--type', 'Invalid',
+        '--api-key', 'xxx',
+        '--owner', ownerAgent,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -104,10 +94,12 @@ describe('add identity command', () => {
     });
 
     it('requires api-key flag', async () => {
-      const result = await runCLI(
-        ['add', 'identity', '--name', 'test', '--type', 'ApiKeyCredentialProvider', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'identity',
+        '--name', 'test',
+        '--type', 'ApiKeyCredentialProvider',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -115,10 +107,13 @@ describe('add identity command', () => {
     });
 
     it('requires owner flag', async () => {
-      const result = await runCLI(
-        ['add', 'identity', '--name', 'test', '--type', 'ApiKeyCredentialProvider', '--api-key', 'xxx', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'identity',
+        '--name', 'test',
+        '--type', 'ApiKeyCredentialProvider',
+        '--api-key', 'xxx',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -129,22 +124,14 @@ describe('add identity command', () => {
   describe('identity creation', () => {
     it('creates identity with owner', async () => {
       const identityName = `id${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'identity',
-          '--name',
-          identityName,
-          '--type',
-          'ApiKeyCredentialProvider',
-          '--api-key',
-          'test-key-123',
-          '--owner',
-          ownerAgent,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'identity',
+        '--name', identityName,
+        '--type', 'ApiKeyCredentialProvider',
+        '--api-key', 'test-key-123',
+        '--owner', ownerAgent,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -162,24 +149,15 @@ describe('add identity command', () => {
 
     it('creates identity with owner and users', async () => {
       const identityName = `shared${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'identity',
-          '--name',
-          identityName,
-          '--type',
-          'ApiKeyCredentialProvider',
-          '--api-key',
-          'shared-key-456',
-          '--owner',
-          ownerAgent,
-          '--users',
-          userAgent,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'identity',
+        '--name', identityName,
+        '--type', 'ApiKeyCredentialProvider',
+        '--api-key', 'shared-key-456',
+        '--owner', ownerAgent,
+        '--users', userAgent,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -188,7 +166,7 @@ describe('add identity command', () => {
 
       // Verify relations
       const projectSpec = JSON.parse(await readFile(join(projectDir, 'agentcore/agentcore.json'), 'utf-8'));
-
+      
       const owner = projectSpec.agents.find((a: { name: string }) => a.name === ownerAgent);
       const ownerIdentity = owner?.identityProviders?.find((i: { name: string }) => i.name === identityName);
       assert.strictEqual(ownerIdentity?.relation, 'own');

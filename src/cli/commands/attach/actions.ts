@@ -1,19 +1,7 @@
 import type { Access } from '../../../schema';
 import { getErrorMessage } from '../../errors';
-import {
-  attachAgentToAgent,
-  attachGatewayToAgent,
-  attachIdentityToAgent,
-  attachMemoryToAgent,
-  bindMcpRuntimeToAgent,
-} from '../../operations/attach';
-import type {
-  AttachAgentResult,
-  AttachGatewayResult,
-  AttachIdentityResult,
-  AttachMcpRuntimeResult,
-  AttachMemoryResult,
-} from './types';
+import { attachAgentToAgent, attachMemoryToAgent, attachIdentityToAgent, bindMcpRuntimeToAgent, attachGatewayToAgent } from '../../operations/attach';
+import type { AttachAgentResult, AttachMemoryResult, AttachIdentityResult, AttachMcpRuntimeResult, AttachGatewayResult } from './types';
 
 // Agent
 export interface ValidatedAttachAgentOptions {
@@ -104,9 +92,7 @@ export interface ValidatedAttachMcpRuntimeOptions {
   runtime: string;
 }
 
-export async function handleAttachMcpRuntime(
-  options: ValidatedAttachMcpRuntimeOptions
-): Promise<AttachMcpRuntimeResult> {
+export async function handleAttachMcpRuntime(options: ValidatedAttachMcpRuntimeOptions): Promise<AttachMcpRuntimeResult> {
   try {
     const sanitized = options.runtime.toUpperCase().replace(/-/g, '_');
     const config = {

@@ -64,5 +64,20 @@ export async function initGitRepo(projectRoot: string): Promise<InitGitRepoResul
     return { status: 'error', message: initResult.stderr || 'git init failed' };
   }
 
+  // Stage all files
+  const addResult = await runSubprocessCapture('git', ['add', '.'], { cwd: projectRoot, stdio: 'pipe' });
+  if (addResult.code !== 0) {
+    return { status: 'error', message: addResult.stderr || 'git add failed' };
+  }
+
+  // Create initial commit
+  const commitResult = await runSubprocessCapture('git', ['commit', '-m', 'Initial commit'], {
+    cwd: projectRoot,
+    stdio: 'pipe',
+  });
+  if (commitResult.code !== 0) {
+    return { status: 'error', message: commitResult.stderr || 'git commit failed' };
+  }
+
   return { status: 'success' };
 }

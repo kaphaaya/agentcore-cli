@@ -104,6 +104,13 @@ export function DeployScreen({
     }
   }, [isInteractive, hasError, phase, onExit]);
 
+  // Auto-exit in non-interactive mode on success
+  useEffect(() => {
+    if (!isInteractive && allSuccess) {
+      onExit();
+    }
+  }, [isInteractive, allSuccess, onExit]);
+
   // Show invoke screen (only in interactive mode when selected from next steps)
   if (showInvoke && isInteractive) {
     return <InvokeScreen isInteractive={true} onExit={onExit} />;
@@ -229,7 +236,7 @@ export function DeployScreen({
         </Box>
       )}
 
-      {allSuccess && (
+      {logFilePath && (
         <Box marginTop={1}>
           <LogLink filePath={logFilePath} />
         </Box>

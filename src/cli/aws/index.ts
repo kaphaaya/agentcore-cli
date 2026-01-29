@@ -13,4 +13,13 @@ export {
   type AgentRuntimeStatusResult,
   type GetAgentRuntimeStatusOptions,
 } from './agentcore-control';
-export { invokeAgentRuntime, invokeAgentRuntimeStreaming, type InvokeAgentRuntimeOptions } from './agentcore';
+export {
+  invokeAgentRuntime,
+  invokeAgentRuntimeStreaming,
+  stopRuntimeSession,
+  type InvokeAgentRuntimeOptions,
+  type InvokeAgentRuntimeResult,
+  type StreamingInvokeResult,
+  type StopRuntimeSessionOptions,
+  type StopRuntimeSessionResult,
+} from './agentcore';

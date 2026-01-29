@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('attach agent command', () => {
   let testDir: string;
@@ -25,47 +25,29 @@ describe('attach agent command', () => {
     projectDir = join(testDir, projectName);
 
     // Add AgentA
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentA,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentA,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create AgentA: ${result.stdout} ${result.stderr}`);
     }
 
     // Add AgentB
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentB,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentB,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create AgentB: ${result.stdout} ${result.stderr}`);
     }
@@ -85,7 +67,11 @@ describe('attach agent command', () => {
     });
 
     it('requires target flag', async () => {
-      const result = await runCLI(['attach', 'agent', '--source', agentA, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'agent',
+        '--source', agentA,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -95,7 +81,12 @@ describe('attach agent command', () => {
 
   describe('attach operations', () => {
     it('attaches agent to agent', async () => {
-      const result = await runCLI(['attach', 'agent', '--source', agentA, '--target', agentB, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'agent',
+        '--source', agentA,
+        '--target', agentB,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -114,10 +105,13 @@ describe('attach agent command', () => {
 
     it('uses custom name', async () => {
       const customName = `custom${Date.now()}`;
-      const result = await runCLI(
-        ['attach', 'agent', '--source', agentA, '--target', agentB, '--name', customName, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'agent',
+        '--source', agentA,
+        '--target', agentB,
+        '--name', customName,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
 
@@ -129,22 +123,26 @@ describe('attach agent command', () => {
     });
 
     it('rejects self-attachment', async () => {
-      const result = await runCLI(['attach', 'agent', '--source', agentA, '--target', agentA, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'agent',
+        '--source', agentA,
+        '--target', agentA,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.toLowerCase().includes('itself') || json.error.toLowerCase().includes('same'),
-        `Error: ${json.error}`
-      );
+      assert.ok(json.error.toLowerCase().includes('itself') || json.error.toLowerCase().includes('same'), `Error: ${json.error}`);
     });
 
     it('rejects non-existent source', async () => {
-      const result = await runCLI(
-        ['attach', 'agent', '--source', 'NonExistent', '--target', agentB, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'agent',
+        '--source', 'NonExistent',
+        '--target', agentB,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);

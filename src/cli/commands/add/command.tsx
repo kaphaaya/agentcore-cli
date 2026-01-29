@@ -1,7 +1,13 @@
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
 import { AddFlow } from '../../tui/screens/add/AddFlow';
-import { handleAddAgent, handleAddGateway, handleAddIdentity, handleAddMcpTool, handleAddMemory } from './actions';
+import {
+  handleAddAgent,
+  handleAddGateway,
+  handleAddIdentity,
+  handleAddMcpTool,
+  handleAddMemory,
+} from './actions';
 import { handleAddTarget } from './target-action';
 import type {
   AddAgentOptions,

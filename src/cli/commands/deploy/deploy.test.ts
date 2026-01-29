@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('deploy --help', () => {
   it('shows verbose option', async () => {
@@ -40,33 +40,27 @@ describe('deploy command', () => {
     projectDir = join(testDir, projectName);
 
     // Add an agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        'TestAgent',
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', 'TestAgent',
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add a target
-    result = await runCLI(
-      ['add', 'target', '--name', 'test-target', '--account', '123456789012', '--region', 'us-east-1', '--json'],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'target',
+      '--name', 'test-target',
+      '--account', '123456789012',
+      '--region', 'us-east-1',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create target: ${result.stdout} ${result.stderr}`);
     }

@@ -130,7 +130,6 @@ export function ShellEscapeContainer({
           if (input && !key.ctrl && !key.meta && !key.backspace && !key.delete) {
             // Also filter out actual backspace/delete characters (DEL=0x7F, BS=0x08)
             // Using RegExp constructor to avoid lint errors about control characters
-            // eslint-disable-next-line security/detect-non-literal-regexp
             const controlChars = new RegExp('[' + String.fromCharCode(0x7f, 0x08) + ']', 'g');
             const filtered = input.replace(controlChars, '');
             if (filtered) {

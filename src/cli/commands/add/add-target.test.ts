@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('add target command', () => {
   let testDir: string;
@@ -28,10 +28,13 @@ describe('add target command', () => {
   });
 
   it('adds target with valid inputs', async () => {
-    const result = await runCLI(
-      ['add', 'target', '--name', 'dev', '--account', '123456789012', '--region', 'us-east-1', '--json'],
-      projectDir
-    );
+    const result = await runCLI([
+      'add', 'target',
+      '--name', 'dev',
+      '--account', '123456789012',
+      '--region', 'us-east-1',
+      '--json'
+    ], projectDir);
 
     assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);
 
@@ -45,10 +48,13 @@ describe('add target command', () => {
   });
 
   it('rejects duplicate target name', async () => {
-    const result = await runCLI(
-      ['add', 'target', '--name', 'dev', '--account', '123456789012', '--region', 'us-west-2', '--json'],
-      projectDir
-    );
+    const result = await runCLI([
+      'add', 'target',
+      '--name', 'dev',
+      '--account', '123456789012',
+      '--region', 'us-west-2',
+      '--json'
+    ], projectDir);
 
     assert.strictEqual(result.exitCode, 1);
 
@@ -58,10 +64,13 @@ describe('add target command', () => {
   });
 
   it('rejects invalid account ID', async () => {
-    const result = await runCLI(
-      ['add', 'target', '--name', 'prod', '--account', 'invalid', '--region', 'us-east-1', '--json'],
-      projectDir
-    );
+    const result = await runCLI([
+      'add', 'target',
+      '--name', 'prod',
+      '--account', 'invalid',
+      '--region', 'us-east-1',
+      '--json'
+    ], projectDir);
 
     assert.strictEqual(result.exitCode, 1);
 
@@ -71,20 +80,13 @@ describe('add target command', () => {
   });
 
   it('rejects invalid region name', async () => {
-    const result = await runCLI(
-      [
-        'add',
-        'target',
-        '--name',
-        'invalid-region-target',
-        '--account',
-        '123456789012',
-        '--region',
-        'invalid-region-123',
-        '--json',
-      ],
-      projectDir
-    );
+    const result = await runCLI([
+      'add', 'target',
+      '--name', 'invalid-region-target',
+      '--account', '123456789012',
+      '--region', 'invalid-region-123',
+      '--json'
+    ], projectDir);
 
     assert.strictEqual(result.exitCode, 1);
 
@@ -94,7 +96,11 @@ describe('add target command', () => {
   });
 
   it('requires all flags', async () => {
-    const result = await runCLI(['add', 'target', '--name', 'staging', '--json'], projectDir);
+    const result = await runCLI([
+      'add', 'target',
+      '--name', 'staging',
+      '--json'
+    ], projectDir);
 
     assert.strictEqual(result.exitCode, 1);
 

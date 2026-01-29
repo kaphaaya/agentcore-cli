@@ -166,6 +166,7 @@ export function SecretInput({
   const hasInput = trimmed.length > 0;
   const hasValidation = Boolean(schema ?? customValidation);
   const showCheckmark = hasInput && isValid && hasValidation;
+  const showInvalidMark = hasInput && !isValid && hasValidation;
 
   return (
     <Box flexDirection="column">
@@ -180,8 +181,9 @@ export function SecretInput({
         {displayValue ? <Text>{displayValue}</Text> : placeholder ? <Text dimColor>{placeholder}</Text> : null}
         <Cursor />
         {showCheckmark && <Text color="green"> ✓</Text>}
+        {showInvalidMark && <Text color="red"> ✗</Text>}
       </Box>
-      {showError && validationErrorMsg && (
+      {(showError || showInvalidMark) && validationErrorMsg && (
         <Box marginTop={1}>
           <Text color="red">{validationErrorMsg}</Text>
         </Box>

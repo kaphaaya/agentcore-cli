@@ -37,7 +37,6 @@ function syncExports(cmd: string): void {
     // Value is in group 2 (double quoted), 3 (single quoted), or 4 (unquoted)
     const value = match[2] ?? match[3] ?? match[4];
     if (key && value) {
-      // eslint-disable-next-line security/detect-object-injection
       process.env[key] = value;
     }
   }
@@ -48,7 +47,8 @@ let buffer = '';
 let activeCallback: ShellExecutorCallbacks | null = null;
 let busy = false;
 let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-let ptyAvailable = true; // Assume PTY works until proven otherwise
+// PTY via 'script' command is not available on Windows
+let ptyAvailable = process.platform !== 'win32';
 
 // Pending command info for retry on PTY failure
 let pendingCommand: { cmd: string; callbacks: ShellExecutorCallbacks; timeoutMs: number } | null = null;

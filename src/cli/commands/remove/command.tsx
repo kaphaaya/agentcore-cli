@@ -3,8 +3,8 @@ import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
 import { RemoveAllScreen, RemoveFlow } from '../../tui/screens/remove';
 import { handleRemove, handleRemoveAll } from './actions';
-import type { RemoveAllOptions, RemoveOptions, ResourceType } from './types';
-import { validateRemoveAllOptions, validateRemoveOptions } from './validate';
+import type { RemoveOptions, RemoveAllOptions, ResourceType } from './types';
+import { validateRemoveOptions, validateRemoveAllOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { Text, render } from 'ink';
 import React from 'react';
@@ -28,7 +28,10 @@ function handleRemoveAllTUI(options: TUIRemoveOptions = {}): void {
   );
 }
 
-function handleRemoveResourceTUI(resourceType: ResourceType, options: { force?: boolean }): void {
+function handleRemoveResourceTUI(
+  resourceType: ResourceType,
+  options: { force?: boolean }
+): void {
   const { clear, unmount } = render(
     <RemoveFlow
       isInteractive={false}

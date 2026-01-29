@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('invoke command', () => {
   let testDir: string;
@@ -23,33 +23,27 @@ describe('invoke command', () => {
     projectDir = join(testDir, projectName);
 
     // Add an agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        'TestAgent',
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', 'TestAgent',
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add a target
-    result = await runCLI(
-      ['add', 'target', '--name', 'test-target', '--account', '123456789012', '--region', 'us-east-1', '--json'],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'target',
+      '--name', 'test-target',
+      '--account', '123456789012',
+      '--region', 'us-east-1',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create target: ${result.stdout} ${result.stderr}`);
     }
@@ -79,17 +73,11 @@ describe('invoke command', () => {
 
   describe('agent/target validation', () => {
     it('rejects non-existent agent', async () => {
-      const result = await runCLI(
-        ['invoke', 'hello', '--target', 'test-target', '--agent', 'nonexistent', '--json'],
-        projectDir
-      );
+      const result = await runCLI(['invoke', 'hello', '--target', 'test-target', '--agent', 'nonexistent', '--json'], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.includes('not found') || json.error.includes('No deployed'),
-        `Error should mention not found: ${json.error}`
-      );
+      assert.ok(json.error.includes('not found') || json.error.includes('No deployed'), `Error should mention not found: ${json.error}`);
     });
   });
 

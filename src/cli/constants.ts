@@ -19,18 +19,14 @@ export const DISTRO_MODE: DistroMode = 'PROD_DISTRO';
  */
 export const DISTRO_CONFIG = {
   PROD_DISTRO: {
-    packageName: '@aws/agentcore-cli',
-    cdkPackageName: '@aws/agentcore-l3-cdk-constructs',
-    binName: 'agentcore-cli',
+    packageName: 'agentcore',
     registryUrl: 'https://registry.npmjs.org',
-    installCommand: 'npm install -g @aws/agentcore-cli@latest',
+    installCommand: 'npm install -g agentcore@latest',
   },
   PRIVATE_DEV_DISTRO: {
-    packageName: '@aws/agentcore-cli',
-    cdkPackageName: '@aws/agentcore-l3-cdk-constructs',
-    binName: 'agentcore-cli',
+    packageName: '@aws/agentcore',
     registryUrl: 'https://npm.pkg.github.com',
-    installCommand: 'npm install -g @aws/agentcore-cli@latest --registry=https://npm.pkg.github.com',
+    installCommand: 'npm install -g @aws/agentcore@latest --registry=https://npm.pkg.github.com',
   },
 } as const;
 

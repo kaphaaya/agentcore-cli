@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('attach memory command', () => {
   let testDir: string;
@@ -27,65 +27,53 @@ describe('attach memory command', () => {
     projectDir = join(testDir, projectName);
 
     // Add AgentA (owner)
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentA,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentA,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create AgentA: ${result.stdout} ${result.stderr}`);
     }
 
     // Add AgentB (will attach memory to this one)
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentB,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentB,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create AgentB: ${result.stdout} ${result.stderr}`);
     }
 
     // Add memory owned by AgentA
-    result = await runCLI(
-      ['add', 'memory', '--name', testMem, '--strategies', 'SEMANTIC', '--owner', agentA, '--json'],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'memory',
+      '--name', testMem,
+      '--strategies', 'SEMANTIC',
+      '--owner', agentA,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create TestMem: ${result.stdout} ${result.stderr}`);
     }
 
     // Add second memory for access level test
-    result = await runCLI(
-      ['add', 'memory', '--name', readOnlyMem, '--strategies', 'SEMANTIC', '--owner', agentA, '--json'],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'memory',
+      '--name', readOnlyMem,
+      '--strategies', 'SEMANTIC',
+      '--owner', agentA,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create ReadOnlyMem: ${result.stdout} ${result.stderr}`);
     }
@@ -105,7 +93,11 @@ describe('attach memory command', () => {
     });
 
     it('requires memory flag', async () => {
-      const result = await runCLI(['attach', 'memory', '--agent', agentB, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'memory',
+        '--agent', agentB,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -113,10 +105,13 @@ describe('attach memory command', () => {
     });
 
     it('validates access value', async () => {
-      const result = await runCLI(
-        ['attach', 'memory', '--agent', agentB, '--memory', testMem, '--access', 'invalid', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'memory',
+        '--agent', agentB,
+        '--memory', testMem,
+        '--access', 'invalid',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -126,7 +121,12 @@ describe('attach memory command', () => {
 
   describe('attach operations', () => {
     it('attaches memory to agent', async () => {
-      const result = await runCLI(['attach', 'memory', '--agent', agentB, '--memory', testMem, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'memory',
+        '--agent', agentB,
+        '--memory', testMem,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -144,10 +144,13 @@ describe('attach memory command', () => {
     });
 
     it('uses specified access level', async () => {
-      const result = await runCLI(
-        ['attach', 'memory', '--agent', agentB, '--memory', readOnlyMem, '--access', 'read', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'memory',
+        '--agent', agentB,
+        '--memory', readOnlyMem,
+        '--access', 'read',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
 
@@ -159,10 +162,12 @@ describe('attach memory command', () => {
     });
 
     it('rejects non-existent agent', async () => {
-      const result = await runCLI(
-        ['attach', 'memory', '--agent', 'NonExistent', '--memory', testMem, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'memory',
+        '--agent', 'NonExistent',
+        '--memory', testMem,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);

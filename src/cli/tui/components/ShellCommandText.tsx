@@ -31,7 +31,6 @@ export function ShellCommandText() {
 
     // Show cursor: highlight the character AT cursor position, or show block at end
     const before = displayCommand.slice(0, cursorPosition);
-    // eslint-disable-next-line security/detect-object-injection
     const charAtCursor = displayCommand[cursorPosition] ?? ' ';
     const after = displayCommand.slice(cursorPosition + 1);
 

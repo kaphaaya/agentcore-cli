@@ -1,6 +1,7 @@
 import type { DeployMessage } from '../../cdk/toolkit-lib';
+import { GradientText } from './StepProgress';
 import { Box, Text } from 'ink';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 
 interface DeployStatusProps {
   messages: DeployMessage[];
@@ -12,22 +13,6 @@ const PROGRESS_BAR_WIDTH = 20;
 
 // CDK message code for resource events
 const CDK_CODE_RESOURCE_EVENT = 'CDK_TOOLKIT_I5502';
-
-/**
- * Animated loading dots that cycle: Loading → Loading. → Loading.. → Loading...
- */
-function LoadingDots() {
-  const [dots, setDots] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots(prev => (prev + 1) % 4);
-    }, 400);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Text dimColor>Loading{'.'.repeat(dots)}</Text>;
-}
 
 /**
  * Extract resource progress from messages.
@@ -152,8 +137,6 @@ export function DeployStatus({ messages, isComplete, hasError }: DeployStatusPro
   // Extract progress for the bar
   const progress = useMemo(() => extractProgress(messages), [messages]);
 
-  const hasContent = progress !== null || parsedResources.length > 0;
-
   // When complete, show final status
   if (isComplete) {
     return (
@@ -185,25 +168,17 @@ export function DeployStatus({ messages, isComplete, hasError }: DeployStatusPro
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} minWidth={50}>
-      <Text bold>Deploy to AWS</Text>
-      {hasContent ? (
-        <>
-          {progress && (
-            <Box marginTop={1}>
-              <ProgressBar current={progress.current} total={progress.total} />
-            </Box>
-          )}
-          {parsedResources.length > 0 && (
-            <Box flexDirection="column" marginTop={1}>
-              {parsedResources.map((m, i) => (
-                <ResourceLine key={`${m.original.code}-${i}`} resource={m.parsed} />
-              ))}
-            </Box>
-          )}
-        </>
-      ) : (
+      <GradientText text="Deploy to AWS" />
+      {progress && (
         <Box marginTop={1}>
-          <LoadingDots />
+          <ProgressBar current={progress.current} total={progress.total} />
+        </Box>
+      )}
+      {parsedResources.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          {parsedResources.map((m, i) => (
+            <ResourceLine key={`${m.original.code}-${i}`} resource={m.parsed} />
+          ))}
         </Box>
       )}
     </Box>

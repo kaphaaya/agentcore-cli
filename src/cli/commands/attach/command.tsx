@@ -1,27 +1,9 @@
 import { COMMAND_DESCRIPTIONS } from '../../tui/copy';
 import { requireProject } from '../../tui/guards';
 import { AttachFlow } from '../../tui/screens/attach/AttachFlow';
-import {
-  handleAttachAgent,
-  handleAttachGateway,
-  handleAttachIdentity,
-  handleAttachMcpRuntime,
-  handleAttachMemory,
-} from './actions';
-import type {
-  AttachAgentOptions,
-  AttachGatewayOptions,
-  AttachIdentityOptions,
-  AttachMcpRuntimeOptions,
-  AttachMemoryOptions,
-} from './types';
-import {
-  validateAttachAgentOptions,
-  validateAttachGatewayOptions,
-  validateAttachIdentityOptions,
-  validateAttachMcpRuntimeOptions,
-  validateAttachMemoryOptions,
-} from './validate';
+import { handleAttachAgent, handleAttachMemory, handleAttachIdentity, handleAttachMcpRuntime, handleAttachGateway } from './actions';
+import type { AttachAgentOptions, AttachMemoryOptions, AttachIdentityOptions, AttachMcpRuntimeOptions, AttachGatewayOptions } from './types';
+import { validateAttachAgentOptions, validateAttachMemoryOptions, validateAttachIdentityOptions, validateAttachMcpRuntimeOptions, validateAttachGatewayOptions } from './validate';
 import type { Command } from '@commander-js/extra-typings';
 import { render } from 'ink';
 import React from 'react';
@@ -136,6 +118,7 @@ async function handleAttachMcpRuntimeCLI(options: AttachMcpRuntimeOptions): Prom
   process.exit(result.success ? 0 : 1);
 }
 
+
 async function handleAttachGatewayCLI(options: AttachGatewayOptions): Promise<void> {
   const validation = validateAttachGatewayOptions(options);
   if (!validation.valid) {
@@ -162,6 +145,7 @@ async function handleAttachGatewayCLI(options: AttachGatewayOptions): Promise<vo
 
   process.exit(result.success ? 0 : 1);
 }
+
 
 export function registerAttach(program: Command) {
   const attachCmd = program

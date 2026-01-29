@@ -1,17 +1,17 @@
 import {
   GatewayNameSchema,
+  getSupportedModelProviders,
   ModelProviderSchema,
   ProviderNameSchema,
   SDKFrameworkSchema,
   TargetLanguageSchema,
-  getSupportedModelProviders,
 } from '../../../schema';
 import type {
   AddAgentOptions,
   AddGatewayOptions,
-  AddIdentityOptions,
   AddMcpToolOptions,
   AddMemoryOptions,
+  AddIdentityOptions,
 } from './types';
 
 export interface ValidationResult {
@@ -85,11 +85,8 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
       return { valid: false, error: '--memory is required for create path' };
     }
 
-    if (!MEMORY_OPTIONS.includes(options.memory as (typeof MEMORY_OPTIONS)[number])) {
-      return {
-        valid: false,
-        error: `Invalid memory option: ${options.memory}. Use none, shortTerm, or longAndShortTerm`,
-      };
+    if (!MEMORY_OPTIONS.includes(options.memory as typeof MEMORY_OPTIONS[number])) {
+      return { valid: false, error: `Invalid memory option: ${options.memory}. Use none, shortTerm, or longAndShortTerm` };
     }
   }
 
@@ -130,10 +127,7 @@ export function validateAddGatewayOptions(options: AddGatewayOptions): Validatio
       return { valid: false, error: '--allowed-audience is required for CUSTOM_JWT authorizer' };
     }
 
-    const audiences = options.allowedAudience
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
+    const audiences = options.allowedAudience.split(',').map(s => s.trim()).filter(Boolean);
     if (audiences.length === 0) {
       return { valid: false, error: 'At least one audience value is required' };
     }
@@ -142,10 +136,7 @@ export function validateAddGatewayOptions(options: AddGatewayOptions): Validatio
       return { valid: false, error: '--allowed-clients is required for CUSTOM_JWT authorizer' };
     }
 
-    const clients = options.allowedClients
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
+    const clients = options.allowedClients.split(',').map(s => s.trim()).filter(Boolean);
     if (clients.length === 0) {
       return { valid: false, error: 'At least one client value is required' };
     }
@@ -180,10 +171,7 @@ export function validateAddMcpToolOptions(options: AddMcpToolOptions): Validatio
     if (!options.agents) {
       return { valid: false, error: '--agents is required for mcp-runtime exposure' };
     }
-    const agents = options.agents
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
+    const agents = options.agents.split(',').map(s => s.trim()).filter(Boolean);
     if (agents.length === 0) {
       return { valid: false, error: 'At least one agent is required' };
     }
@@ -212,10 +200,7 @@ export function validateAddMemoryOptions(options: AddMemoryOptions): ValidationR
     return { valid: false, error: '--strategies is required' };
   }
 
-  const strategies = options.strategies
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
+  const strategies = options.strategies.split(',').map(s => s.trim()).filter(Boolean);
   if (strategies.length === 0) {
     return { valid: false, error: 'At least one strategy is required' };
   }

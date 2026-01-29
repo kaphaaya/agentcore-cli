@@ -267,23 +267,27 @@ interface RemovalState {
   result: RemovalResult | null;
 }
 
+type RemoveResult = RemovalResult & { logFilePath?: string };
+
 export function useRemoveAgent() {
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (agentName: string, preview?: RemovalPreview) => {
+  const remove = useCallback(async (agentName: string, preview?: RemovalPreview): Promise<RemoveResult> => {
     setState({ isLoading: true, result: null });
     const result = await removeAgent(agentName);
     setState({ isLoading: false, result });
 
     // Log the removal if preview is provided
+    let logPath: string | undefined;
     if (preview) {
       const logger = new RemoveLogger({ resourceType: 'agent', resourceName: agentName });
       logger.logRemoval(preview, result.ok, result.ok ? undefined : result.error);
-      setLogFilePath(logger.getAbsoluteLogPath());
+      logPath = logger.getAbsoluteLogPath();
+      setLogFilePath(logPath);
     }
 
-    return result;
+    return { ...result, logFilePath: logPath };
   }, []);
 
   const reset = useCallback(() => {
@@ -298,18 +302,20 @@ export function useRemoveGateway() {
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (gatewayName: string, preview?: RemovalPreview) => {
+  const remove = useCallback(async (gatewayName: string, preview?: RemovalPreview): Promise<RemoveResult> => {
     setState({ isLoading: true, result: null });
     const result = await removeGateway(gatewayName);
     setState({ isLoading: false, result });
 
+    let logPath: string | undefined;
     if (preview) {
       const logger = new RemoveLogger({ resourceType: 'gateway', resourceName: gatewayName });
       logger.logRemoval(preview, result.ok, result.ok ? undefined : result.error);
-      setLogFilePath(logger.getAbsoluteLogPath());
+      logPath = logger.getAbsoluteLogPath();
+      setLogFilePath(logPath);
     }
 
-    return result;
+    return { ...result, logFilePath: logPath };
   }, []);
 
   const reset = useCallback(() => {
@@ -324,18 +330,20 @@ export function useRemoveMcpTool() {
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (tool: RemovableMcpTool, preview?: RemovalPreview) => {
+  const remove = useCallback(async (tool: RemovableMcpTool, preview?: RemovalPreview): Promise<RemoveResult> => {
     setState({ isLoading: true, result: null });
     const result = await removeMcpTool(tool);
     setState({ isLoading: false, result });
 
+    let logPath: string | undefined;
     if (preview) {
       const logger = new RemoveLogger({ resourceType: 'mcp-tool', resourceName: tool.name });
       logger.logRemoval(preview, result.ok, result.ok ? undefined : result.error);
-      setLogFilePath(logger.getAbsoluteLogPath());
+      logPath = logger.getAbsoluteLogPath();
+      setLogFilePath(logPath);
     }
 
-    return result;
+    return { ...result, logFilePath: logPath };
   }, []);
 
   const reset = useCallback(() => {
@@ -350,18 +358,20 @@ export function useRemoveMemory() {
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (memoryName: string, preview?: RemovalPreview) => {
+  const remove = useCallback(async (memoryName: string, preview?: RemovalPreview): Promise<RemoveResult> => {
     setState({ isLoading: true, result: null });
     const result = await removeMemory(memoryName);
     setState({ isLoading: false, result });
 
+    let logPath: string | undefined;
     if (preview) {
       const logger = new RemoveLogger({ resourceType: 'memory', resourceName: memoryName });
       logger.logRemoval(preview, result.ok, result.ok ? undefined : result.error);
-      setLogFilePath(logger.getAbsoluteLogPath());
+      logPath = logger.getAbsoluteLogPath();
+      setLogFilePath(logPath);
     }
 
-    return result;
+    return { ...result, logFilePath: logPath };
   }, []);
 
   const reset = useCallback(() => {
@@ -376,18 +386,20 @@ export function useRemoveIdentity() {
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (identityName: string, preview?: RemovalPreview) => {
+  const remove = useCallback(async (identityName: string, preview?: RemovalPreview): Promise<RemoveResult> => {
     setState({ isLoading: true, result: null });
     const result = await removeIdentity(identityName);
     setState({ isLoading: false, result });
 
+    let logPath: string | undefined;
     if (preview) {
       const logger = new RemoveLogger({ resourceType: 'identity', resourceName: identityName });
       logger.logRemoval(preview, result.ok, result.ok ? undefined : result.error);
-      setLogFilePath(logger.getAbsoluteLogPath());
+      logPath = logger.getAbsoluteLogPath();
+      setLogFilePath(logPath);
     }
 
-    return result;
+    return { ...result, logFilePath: logPath };
   }, []);
 
   const reset = useCallback(() => {
@@ -402,18 +414,20 @@ export function useRemoveTarget() {
   const [state, setState] = useState<RemovalState>({ isLoading: false, result: null });
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
 
-  const remove = useCallback(async (targetName: string, preview?: RemovalPreview) => {
+  const remove = useCallback(async (targetName: string, preview?: RemovalPreview): Promise<RemoveResult> => {
     setState({ isLoading: true, result: null });
     const result = await removeTarget(targetName);
     setState({ isLoading: false, result });
 
+    let logPath: string | undefined;
     if (preview) {
       const logger = new RemoveLogger({ resourceType: 'target', resourceName: targetName });
       logger.logRemoval(preview, result.ok, result.ok ? undefined : result.error);
-      setLogFilePath(logger.getAbsoluteLogPath());
+      logPath = logger.getAbsoluteLogPath();
+      setLogFilePath(logPath);
     }
 
-    return result;
+    return { ...result, logFilePath: logPath };
   }, []);
 
   const reset = useCallback(() => {

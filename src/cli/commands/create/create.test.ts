@@ -1,10 +1,10 @@
-import { exists, runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI, exists } from '../../../test-utils/index.js';
 
 describe('create command', () => {
   let testDir: string;
@@ -44,23 +44,14 @@ describe('create command', () => {
   describe('with agent', () => {
     it('creates project with agent', async () => {
       const name = `Agent${Date.now()}`;
-      const result = await runCLI(
-        [
-          'create',
-          '--name',
-          name,
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        testDir
-      );
+      const result = await runCLI([
+        'create', '--name', name,
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], testDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);
 
@@ -79,23 +70,14 @@ describe('create command', () => {
     });
 
     it('validates framework', async () => {
-      const result = await runCLI(
-        [
-          'create',
-          '--name',
-          'BadFW',
-          '--language',
-          'Python',
-          '--framework',
-          'NotReal',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        testDir
-      );
+      const result = await runCLI([
+        'create', '--name', 'BadFW',
+        '--language', 'Python',
+        '--framework', 'NotReal',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], testDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -142,10 +124,7 @@ describe('create command', () => {
     it('creates in specified directory', async () => {
       const name = `OutDir${Date.now()}`;
       const customDir = join(testDir, 'custom-output');
-      const result = await runCLI(
-        ['create', '--name', name, '--defaults', '--output-dir', customDir, '--json'],
-        testDir
-      );
+      const result = await runCLI(['create', '--name', name, '--defaults', '--output-dir', customDir, '--json'], testDir);
 
       assert.strictEqual(result.exitCode, 0, `stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);

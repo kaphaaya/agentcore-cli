@@ -7,6 +7,6 @@ export {
   type SpawnDevServerOptions,
 } from './server';
 
-export { getDevConfig, loadProjectConfig, type DevConfig } from './config';
+export { getDevConfig, getDevSupportedAgents, getAgentPort, loadProjectConfig, type DevConfig } from './config';
 
 export { invokeAgent, invokeAgentStreaming } from './invoke';

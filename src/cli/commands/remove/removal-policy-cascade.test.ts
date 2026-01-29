@@ -1,13 +1,14 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('removal policy cascade', () => {
   let testDir: string;
+  let projectDir: string;
 
   beforeAll(async () => {
     testDir = join(tmpdir(), `agentcore-removal-policy-cascade-${randomUUID()}`);
@@ -27,63 +28,23 @@ describe('removal policy cascade', () => {
       const projDir = join(testDir, projectName);
 
       // Add owner and user agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'Owner',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'Owner', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'User',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'User', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add memory with user
-      result = await runCLI(
-        [
-          'add',
-          'memory',
-          '--name',
-          'SharedMem',
-          '--strategies',
-          'SEMANTIC',
-          '--owner',
-          'Owner',
-          '--users',
-          'User',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'memory', '--name', 'SharedMem', '--strategies', 'SEMANTIC',
+        '--owner', 'Owner', '--users', 'User', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Remove memory with cascade
@@ -94,10 +55,10 @@ describe('removal policy cascade', () => {
       const projectSpec = JSON.parse(await readFile(join(projDir, 'agentcore/agentcore.json'), 'utf-8'));
       const owner = projectSpec.agents.find((a: { name: string }) => a.name === 'Owner');
       const user = projectSpec.agents.find((a: { name: string }) => a.name === 'User');
-
+      
       const ownerHasMem = owner?.memoryProviders?.some((m: { name: string }) => m.name === 'SharedMem');
       const userHasMem = user?.memoryProviders?.some((m: { name: string }) => m.name === 'SharedMem');
-
+      
       assert.ok(!ownerHasMem, 'Owner should not have memory');
       assert.ok(!userHasMem, 'User should not have memory');
     });
@@ -112,65 +73,23 @@ describe('removal policy cascade', () => {
       const projDir = join(testDir, projectName);
 
       // Add owner and user agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'Owner',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'Owner', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'User',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'User', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add identity with user
-      result = await runCLI(
-        [
-          'add',
-          'identity',
-          '--name',
-          'SharedId',
-          '--type',
-          'ApiKeyCredentialProvider',
-          '--api-key',
-          'test-key',
-          '--owner',
-          'Owner',
-          '--users',
-          'User',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'identity', '--name', 'SharedId', '--type', 'ApiKeyCredentialProvider',
+        '--api-key', 'test-key', '--owner', 'Owner', '--users', 'User', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Remove identity with cascade
@@ -181,10 +100,10 @@ describe('removal policy cascade', () => {
       const projectSpec = JSON.parse(await readFile(join(projDir, 'agentcore/agentcore.json'), 'utf-8'));
       const owner = projectSpec.agents.find((a: { name: string }) => a.name === 'Owner');
       const user = projectSpec.agents.find((a: { name: string }) => a.name === 'User');
-
+      
       const ownerHasId = owner?.identityProviders?.some((i: { name: string }) => i.name === 'SharedId');
       const userHasId = user?.identityProviders?.some((i: { name: string }) => i.name === 'SharedId');
-
+      
       assert.ok(!ownerHasId, 'Owner should not have identity');
       assert.ok(!userHasId, 'User should not have identity');
     });

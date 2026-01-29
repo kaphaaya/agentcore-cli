@@ -179,9 +179,7 @@ function HelpContent({ commands, initialQuery, notice, onNoticeDismiss, onSelect
       return;
     }
 
-    // eslint-disable-next-line security/detect-object-injection
     if (key.return && items[clampedIndex]) {
-      // eslint-disable-next-line security/detect-object-injection
       onSelect(items[clampedIndex].command.id);
       return;
     }

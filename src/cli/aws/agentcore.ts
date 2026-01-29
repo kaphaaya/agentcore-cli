@@ -1,10 +1,43 @@
 import { getCredentialProvider } from './account';
-import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from '@aws-sdk/client-bedrock-agentcore';
+import {
+  BedrockAgentCoreClient,
+  InvokeAgentRuntimeCommand,
+  StopRuntimeSessionCommand,
+} from '@aws-sdk/client-bedrock-agentcore';
+
+/** Logger interface for SSE events */
+export interface SSELogger {
+  logSSEEvent(rawLine: string): void;
+}
 
 export interface InvokeAgentRuntimeOptions {
   region: string;
   runtimeArn: string;
   payload: string;
+  sessionId?: string;
+  /** Optional logger for SSE event debugging */
+  logger?: SSELogger;
+}
+
+export interface InvokeAgentRuntimeResult {
+  content: string;
+  sessionId?: string;
+}
+
+export interface StreamingInvokeResult {
+  stream: AsyncGenerator<string, void, unknown>;
+  sessionId: string | undefined;
+}
+
+export interface StopRuntimeSessionOptions {
+  region: string;
+  runtimeArn: string;
+  sessionId: string;
+}
+
+export interface StopRuntimeSessionResult {
+  sessionId: string | undefined;
+  statusCode: number | undefined;
 }
 
 /**
@@ -65,11 +98,9 @@ function extractResult(text: string): string {
 
 /**
  * Invoke an AgentCore Runtime and stream the response chunks.
- * Yields text chunks as they arrive from the SSE stream.
+ * Returns an object with the stream generator and session ID.
  */
-export async function* invokeAgentRuntimeStreaming(
-  options: InvokeAgentRuntimeOptions
-): AsyncGenerator<string, void, unknown> {
+export async function invokeAgentRuntimeStreaming(options: InvokeAgentRuntimeOptions): Promise<StreamingInvokeResult> {
   const client = new BedrockAgentCoreClient({
     region: options.region,
     credentials: getCredentialProvider(),
@@ -80,9 +111,11 @@ export async function* invokeAgentRuntimeStreaming(
     payload: new TextEncoder().encode(JSON.stringify({ prompt: options.payload })),
     contentType: 'application/json',
     accept: 'application/json',
+    runtimeSessionId: options.sessionId,
   });
 
   const response = await client.send(command);
+  const sessionId = response.runtimeSessionId;
 
   if (!response.response) {
     throw new Error('No response from AgentCore Runtime');
@@ -91,62 +124,67 @@ export async function* invokeAgentRuntimeStreaming(
   const webStream = response.response.transformToWebStream();
   const reader = webStream.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
-  let fullResponse = '';
-  let yieldedContent = false;
 
-  try {
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
+  async function* streamGenerator(): AsyncGenerator<string, void, unknown> {
+    let buffer = '';
+    const { logger } = options;
 
-      const decoded = decoder.decode(result.value as Uint8Array, { stream: true });
-      buffer += decoded;
-      fullResponse += decoded;
+    try {
+      while (true) {
+        const result = await reader.read();
+        if (result.done) break;
 
-      // Process complete lines from the buffer
-      const lines = buffer.split('\n');
-      // Keep the last incomplete line in the buffer
-      buffer = lines.pop() ?? '';
+        buffer += decoder.decode(result.value as Uint8Array, { stream: true });
 
-      for (const line of lines) {
-        const { content, error } = parseSSELine(line);
+        // Process complete lines from the buffer
+        const lines = buffer.split('\n');
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          // Log raw SSE line if logger provided
+          if (logger && line.trim()) {
+            logger.logSSEEvent(line);
+          }
+          const { content, error } = parseSSELine(line);
+          if (error) {
+            yield `Error: ${error}`;
+            return;
+          }
+          if (content) {
+            yield content;
+          }
+        }
+      }
+
+      // Process any remaining content in the buffer
+      if (buffer) {
+        // Log raw SSE line if logger provided
+        if (logger && buffer.trim()) {
+          logger.logSSEEvent(buffer);
+        }
+        const { content, error } = parseSSELine(buffer);
         if (error) {
           yield `Error: ${error}`;
-          return;
-        }
-        if (content) {
+        } else if (content) {
           yield content;
-          yieldedContent = true;
         }
       }
+    } finally {
+      reader.releaseLock();
     }
-
-    // Process any remaining content in the buffer for SSE
-    if (buffer) {
-      const { content, error } = parseSSELine(buffer);
-      if (error) {
-        yield `Error: ${error}`;
-        return;
-      } else if (content) {
-        yield content;
-        yieldedContent = true;
-      }
-    }
-
-    // If no SSE content was found, treat as plain JSON response
-    if (!yieldedContent && fullResponse.trim()) {
-      yield extractResult(fullResponse.trim());
-    }
-  } finally {
-    reader.releaseLock();
   }
+
+  return {
+    stream: streamGenerator(),
+    sessionId,
+  };
 }
 
 /**
  * Invoke an AgentCore Runtime and return the response.
  */
-export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Promise<string> {
+export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Promise<InvokeAgentRuntimeResult> {
   const client = new BedrockAgentCoreClient({
     region: options.region,
     credentials: getCredentialProvider(),
@@ -157,6 +195,7 @@ export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Pr
     payload: new TextEncoder().encode(JSON.stringify({ prompt: options.payload })),
     contentType: 'application/json',
     accept: 'application/json',
+    runtimeSessionId: options.sessionId,
   });
 
   const response = await client.send(command);
@@ -169,10 +208,32 @@ export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Pr
   const text = new TextDecoder().decode(bytes);
 
   // Parse SSE format if present
-  if (text.includes('data: ')) {
-    return parseSSE(text);
-  }
+  const content = text.includes('data: ') ? parseSSE(text) : extractResult(text);
 
-  // Handle plain JSON response (non-streaming frameworks)
-  return extractResult(text);
+  return {
+    content,
+    sessionId: response.runtimeSessionId,
+  };
+}
+
+/**
+ * Stop a runtime session.
+ */
+export async function stopRuntimeSession(options: StopRuntimeSessionOptions): Promise<StopRuntimeSessionResult> {
+  const client = new BedrockAgentCoreClient({
+    region: options.region,
+    credentials: getCredentialProvider(),
+  });
+
+  const command = new StopRuntimeSessionCommand({
+    agentRuntimeArn: options.runtimeArn,
+    runtimeSessionId: options.sessionId,
+  });
+
+  const response = await client.send(command);
+
+  return {
+    sessionId: response.runtimeSessionId,
+    statusCode: response.statusCode,
+  };
 }

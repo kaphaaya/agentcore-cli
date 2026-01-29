@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('add gateway command', () => {
   let testDir: string;
@@ -30,7 +30,11 @@ describe('add gateway command', () => {
   describe('basic gateway', () => {
     it('creates gateway with default authorizer', async () => {
       const gatewayName = `gw-${Date.now()}`;
-      const result = await runCLI(['add', 'gateway', '--name', gatewayName, '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'gateway',
+        '--name', gatewayName,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
 
@@ -46,7 +50,10 @@ describe('add gateway command', () => {
     });
 
     it('requires name flag', async () => {
-      const result = await runCLI(['add', 'gateway', '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'gateway',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -55,7 +62,11 @@ describe('add gateway command', () => {
     });
 
     it('validates gateway name format', async () => {
-      const result = await runCLI(['add', 'gateway', '--name', 'invalid name!', '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'gateway',
+        '--name', 'invalid name!',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -64,13 +75,21 @@ describe('add gateway command', () => {
 
     it('rejects duplicate gateway name', async () => {
       const gatewayName = 'dup-gateway';
-
+      
       // First creation should succeed
-      const first = await runCLI(['add', 'gateway', '--name', gatewayName, '--json'], projectDir);
+      const first = await runCLI([
+        'add', 'gateway',
+        '--name', gatewayName,
+        '--json'
+      ], projectDir);
       assert.strictEqual(first.exitCode, 0, `First should succeed: ${first.stdout}`);
 
       // Second creation should fail
-      const second = await runCLI(['add', 'gateway', '--name', gatewayName, '--json'], projectDir);
+      const second = await runCLI([
+        'add', 'gateway',
+        '--name', gatewayName,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(second.exitCode, 1);
       const json = JSON.parse(second.stdout);
@@ -82,24 +101,15 @@ describe('add gateway command', () => {
   describe('JWT authorizer', () => {
     it('creates gateway with CUSTOM_JWT authorizer', async () => {
       const gatewayName = `jwt-gw-${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'gateway',
-          '--name',
-          gatewayName,
-          '--authorizer-type',
-          'CUSTOM_JWT',
-          '--discovery-url',
-          'https://example.com/.well-known/openid-configuration',
-          '--allowed-audience',
-          'aud1,aud2',
-          '--allowed-clients',
-          'client1',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'gateway',
+        '--name', gatewayName,
+        '--authorizer-type', 'CUSTOM_JWT',
+        '--discovery-url', 'https://example.com/.well-known/openid-configuration',
+        '--allowed-audience', 'aud1,aud2',
+        '--allowed-clients', 'client1',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);
 
@@ -115,10 +125,12 @@ describe('add gateway command', () => {
     });
 
     it('requires JWT fields when CUSTOM_JWT', async () => {
-      const result = await runCLI(
-        ['add', 'gateway', '--name', 'no-jwt', '--authorizer-type', 'CUSTOM_JWT', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'gateway',
+        '--name', 'no-jwt',
+        '--authorizer-type', 'CUSTOM_JWT',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -127,24 +139,15 @@ describe('add gateway command', () => {
     });
 
     it('validates discovery URL format', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'gateway',
-          '--name',
-          'bad-url',
-          '--authorizer-type',
-          'CUSTOM_JWT',
-          '--discovery-url',
-          'https://example.com/wrong',
-          '--allowed-audience',
-          'aud',
-          '--allowed-clients',
-          'client',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'gateway',
+        '--name', 'bad-url',
+        '--authorizer-type', 'CUSTOM_JWT',
+        '--discovery-url', 'https://example.com/wrong',
+        '--allowed-audience', 'aud',
+        '--allowed-clients', 'client',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);

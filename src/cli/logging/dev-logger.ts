@@ -101,6 +101,15 @@ ${separator}
   }
 
   /**
+   * Log a raw SSE event for debugging purposes.
+   * This logs the full SSE line as received from the server.
+   */
+  logSSEEvent(rawLine: string): void {
+    const line = `[${this.formatTime()}] [SSE] ${rawLine}`;
+    appendFileSync(this.logFilePath, line + '\n', 'utf-8');
+  }
+
+  /**
    * Finalize the log with a closing message
    */
   finalize(): void {

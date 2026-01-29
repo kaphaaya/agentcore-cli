@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('remove gateway command', () => {
   let testDir: string;
@@ -25,30 +25,25 @@ describe('remove gateway command', () => {
     projectDir = join(testDir, projectName);
 
     // Add agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentName,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentName,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add gateway
-    result = await runCLI(['add', 'gateway', '--name', gatewayName, '--json'], projectDir);
+    result = await runCLI([
+      'add', 'gateway',
+      '--name', gatewayName,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create gateway: ${result.stdout} ${result.stderr}`);
     }
@@ -95,17 +90,19 @@ describe('remove gateway command', () => {
 
     it('blocks removal when gateway has attached agents', async () => {
       // Attach gateway to agent
-      await runCLI(['attach', 'gateway', '--agent', agentName, '--gateway', gatewayName, '--json'], projectDir);
+      await runCLI([
+        'attach', 'gateway',
+        '--agent', agentName,
+        '--gateway', gatewayName,
+        '--json'
+      ], projectDir);
 
       // Try to remove - should fail with restrict policy
       const result = await runCLI(['remove', 'gateway', '--name', gatewayName, '--json'], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.toLowerCase().includes('attached') || json.error.toLowerCase().includes('use'),
-        `Error: ${json.error}`
-      );
+      assert.ok(json.error.toLowerCase().includes('attached') || json.error.toLowerCase().includes('use'), `Error: ${json.error}`);
     });
   });
 });

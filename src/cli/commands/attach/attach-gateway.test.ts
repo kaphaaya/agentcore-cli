@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('attach gateway command', () => {
   let testDir: string;
@@ -25,30 +25,25 @@ describe('attach gateway command', () => {
     projectDir = join(testDir, projectName);
 
     // Add agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentName,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentName,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add gateway
-    result = await runCLI(['add', 'gateway', '--name', gatewayName, '--json'], projectDir);
+    result = await runCLI([
+      'add', 'gateway',
+      '--name', gatewayName,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create gateway: ${result.stdout} ${result.stderr}`);
     }
@@ -68,7 +63,11 @@ describe('attach gateway command', () => {
     });
 
     it('requires gateway flag', async () => {
-      const result = await runCLI(['attach', 'gateway', '--agent', agentName, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'gateway',
+        '--agent', agentName,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -78,10 +77,12 @@ describe('attach gateway command', () => {
 
   describe('attach operations', () => {
     it('attaches gateway to agent', async () => {
-      const result = await runCLI(
-        ['attach', 'gateway', '--agent', agentName, '--gateway', gatewayName, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'gateway',
+        '--agent', agentName,
+        '--gateway', gatewayName,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -98,10 +99,12 @@ describe('attach gateway command', () => {
     });
 
     it('rejects non-existent agent', async () => {
-      const result = await runCLI(
-        ['attach', 'gateway', '--agent', 'NonExistent', '--gateway', gatewayName, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'gateway',
+        '--agent', 'NonExistent',
+        '--gateway', gatewayName,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);

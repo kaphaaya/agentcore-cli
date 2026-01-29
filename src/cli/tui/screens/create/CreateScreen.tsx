@@ -1,9 +1,9 @@
 import { ProjectNameSchema } from '../../../../schema';
-import { type NextStep, NextSteps, Screen, SelectList, StepProgress, TextInput } from '../../components';
+import { LogLink, type NextStep, NextSteps, Screen, SelectList, StepProgress, TextInput } from '../../components';
 import { HELP_TEXT } from '../../constants';
 import { useListNavigation } from '../../hooks';
 import { STATUS_COLORS } from '../../theme';
-import { GenerateWizardStepIndicator, GenerateWizardUI, getWizardHelpText } from '../generate/GenerateWizardUI';
+import { AddAgentScreen } from '../agent/AddAgentScreen';
 import { useCreateFlow } from './useCreateFlow';
 import { Box, Text } from 'ink';
 import { join } from 'path';
@@ -31,7 +31,7 @@ const CREATE_NEXT_STEPS: NextStep[] = [
 ];
 
 const CREATE_PROMPT_ITEMS = [
-  { id: 'yes', title: 'Yes, create an agent' },
+  { id: 'yes', title: 'Yes, add an agent' },
   { id: 'no', title: "No, I'll do it later" },
 ];
 
@@ -110,7 +110,7 @@ export function CreateScreen({ cwd, isInteractive, onExit, onNavigate }: CreateS
           </Text>
         </Box>
         <Box flexDirection="column">
-          <Text>Would you like to create an agent now?</Text>
+          <Text>Would you like to add an agent now?</Text>
           <Box marginTop={1}>
             <SelectList items={CREATE_PROMPT_ITEMS} selectedIndex={createPromptIndex} />
           </Box>
@@ -119,33 +119,14 @@ export function CreateScreen({ cwd, isInteractive, onExit, onNavigate }: CreateS
     );
   }
 
-  // Create wizard phase
+  // Create wizard phase - use AddAgentScreen for consistent experience
   if (flow.phase === 'create-wizard') {
-    const headerContent = (
-      <Box flexDirection="column">
-        <Box marginBottom={1}>
-          <Text>
-            Project: <Text color={STATUS_COLORS.success}>{flow.projectName}</Text>
-          </Text>
-        </Box>
-        <GenerateWizardStepIndicator wizard={flow.wizard} />
-      </Box>
-    );
-
     return (
-      <Screen
-        title="AgentCore Create"
-        onExit={flow.goBackFromWizard}
-        helpText={getWizardHelpText(flow.wizard.step)}
-        headerContent={headerContent}
-      >
-        <GenerateWizardUI
-          wizard={flow.wizard}
-          onBack={flow.goBackFromWizard}
-          onConfirm={flow.confirmCreate}
-          isActive={true}
-        />
-      </Screen>
+      <AddAgentScreen
+        existingAgentNames={[]}
+        onComplete={flow.handleAddAgentComplete}
+        onExit={flow.goBackFromAddAgent}
+      />
     );
   }
 
@@ -188,8 +169,13 @@ export function CreateScreen({ cwd, isInteractive, onExit, onNavigate }: CreateS
         </Box>
       )}
       {flow.hasError && (
-        <Box marginTop={1}>
+        <Box marginTop={1} flexDirection="column">
           <Text color={STATUS_COLORS.error}>Project creation failed.</Text>
+          {flow.logFilePath && (
+            <Box marginTop={1}>
+              <LogLink filePath={flow.logFilePath} />
+            </Box>
+          )}
         </Box>
       )}
     </Screen>

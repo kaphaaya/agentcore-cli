@@ -66,14 +66,61 @@ function resolveCodeDirectory(codeLocation: string, configRoot: string): string 
 }
 
 /**
+ * Returns a list of agents that support dev mode.
+ */
+export function getDevSupportedAgents(project: AgentCoreProjectSpec | null): AgentEnvSpec[] {
+  if (!project?.agents) return [];
+  return project.agents.filter(agent => isDevSupported(agent).supported);
+}
+
+/**
+ * Get the port for a specific agent based on its index in the project.
+ * Base port + agent index = actual port
+ */
+export function getAgentPort(project: AgentCoreProjectSpec | null, agentName: string, basePort: number): number {
+  if (!project) return basePort;
+  const index = project.agents.findIndex(a => a.name === agentName);
+  return index >= 0 ? basePort + index : basePort;
+}
+
+/**
  * Derives dev server configuration from project config.
  * Falls back to sensible defaults if no config is available.
+ * @param agentName - Optional agent name. If not provided, uses the first dev-supported agent.
  */
-export function getDevConfig(workingDir: string, project: AgentCoreProjectSpec | null, configRoot?: string): DevConfig {
+export function getDevConfig(
+  workingDir: string,
+  project: AgentCoreProjectSpec | null,
+  configRoot?: string,
+  agentName?: string
+): DevConfig {
   const dirName = workingDir.split('/').pop() ?? 'unknown';
-  const firstAgent = project?.agents[0];
 
-  if (!firstAgent) {
+  // If project hasn't loaded yet, return default config
+  if (!project) {
+    return {
+      agentName: agentName ?? `${dirName}_Agent`,
+      module: 'src.main:app',
+      directory: workingDir,
+      hasConfig: false,
+      isPython: true,
+    };
+  }
+
+  // Find the target agent
+  let targetAgent: AgentEnvSpec | undefined;
+  if (agentName) {
+    targetAgent = project.agents.find(a => a.name === agentName);
+    if (!targetAgent) {
+      throw new Error(`Agent "${agentName}" not found in project.`);
+    }
+  } else {
+    // Default to first dev-supported agent
+    const supportedAgents = getDevSupportedAgents(project);
+    targetAgent = supportedAgents[0];
+  }
+
+  if (!targetAgent) {
     return {
       agentName: `${dirName}_Agent`,
       module: 'src.main:app',
@@ -83,25 +130,25 @@ export function getDevConfig(workingDir: string, project: AgentCoreProjectSpec |
     };
   }
 
-  const supportResult = isDevSupported(firstAgent);
+  const supportResult = isDevSupported(targetAgent);
   if (!supportResult.supported) {
     throw new Error(supportResult.reason ?? 'Agent does not support dev mode');
   }
 
   const directory =
-    configRoot && firstAgent.runtime.artifact === 'CodeZip' && firstAgent.runtime.codeLocation
-      ? resolveCodeDirectory(firstAgent.runtime.codeLocation, configRoot)
+    configRoot && targetAgent.runtime.artifact === 'CodeZip' && targetAgent.runtime.codeLocation
+      ? resolveCodeDirectory(targetAgent.runtime.codeLocation, configRoot)
       : workingDir;
 
   // At this point we know it's CodeZip (ContainerImage is rejected above)
-  const runtime = firstAgent.runtime as { entrypoint: string };
+  const runtime = targetAgent.runtime as { entrypoint: string };
 
   return {
-    agentName: firstAgent.name,
+    agentName: targetAgent.name,
     module: runtime.entrypoint,
     directory,
     hasConfig: true,
-    isPython: firstAgent.targetLanguage === 'Python',
+    isPython: targetAgent.targetLanguage === 'Python',
   };
 }
 

@@ -46,6 +46,8 @@ export async function installDependencies(projectDir: string): Promise<PythonSet
  * Returns a result with status and optional error details.
  */
 export async function setupPythonProject(options: PythonSetupOptions): Promise<PythonSetupResult> {
+  if (process.env.AGENTCORE_SKIP_INSTALL) return { status: 'success' };
+
   const { projectDir, venvName = '.venv' } = options;
 
   const uvAvailable = await checkUvAvailable();

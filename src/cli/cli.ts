@@ -11,6 +11,7 @@ import { registerPackage } from './commands/package';
 import { registerPlan } from './commands/plan';
 import { registerRemove } from './commands/remove';
 import { registerStatus } from './commands/status';
+import { registerStopSession } from './commands/stop-session';
 import { registerUpdate } from './commands/update';
 import { registerValidate } from './commands/validate';
 import { PACKAGE_VERSION } from './constants';
@@ -83,13 +84,17 @@ export function createProgram(): Command {
     .description(COMMAND_DESCRIPTIONS.program)
     .version(PACKAGE_VERSION)
     .showHelpAfterError()
-    .showSuggestionAfterError()
-    .configureHelp({
-      formatHelp: () => {
-        renderHelp(program);
-        return '';
-      },
-    });
+    .showSuggestionAfterError();
+
+  // Custom help only for main program
+  program.addHelpCommand(false); // Disable default help subcommand
+  program.helpOption('-h, --help', 'Display help');
+  
+  // Override help action for main program only
+  program.on('option:help', () => {
+    renderHelp(program);
+    process.exit(0);
+  });
 
   registerCommands(program);
 
@@ -110,6 +115,7 @@ export function registerCommands(program: Command) {
   registerPlan(program);
   registerRemove(program);
   registerStatus(program);
+  registerStopSession(program);
   registerUpdate(program);
   registerValidate(program);
 }

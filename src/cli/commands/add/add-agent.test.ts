@@ -1,10 +1,10 @@
-import { exists, runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI, exists } from '../../../test-utils/index.js';
 
 describe('add agent command', () => {
   let testDir: string;
@@ -30,24 +30,15 @@ describe('add agent command', () => {
   describe('create path', () => {
     it('creates agent with valid inputs', async () => {
       const agentName = `Agent${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          agentName,
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', agentName,
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
 
@@ -65,7 +56,11 @@ describe('add agent command', () => {
     });
 
     it('requires all create path options', async () => {
-      const result = await runCLI(['add', 'agent', '--name', 'Incomplete', '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', 'Incomplete',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -74,24 +69,15 @@ describe('add agent command', () => {
     });
 
     it('validates framework', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'BadFW',
-          '--language',
-          'Python',
-          '--framework',
-          'NotReal',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', 'BadFW',
+        '--language', 'Python',
+        '--framework', 'NotReal',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -100,24 +86,15 @@ describe('add agent command', () => {
     });
 
     it('rejects TypeScript for create path', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'TSAgent',
-          '--language',
-          'TypeScript',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', 'TSAgent',
+        '--language', 'TypeScript',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -126,24 +103,15 @@ describe('add agent command', () => {
     });
 
     it('validates framework/model compatibility', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'BadCombo',
-          '--language',
-          'Python',
-          '--framework',
-          'OpenAIAgents',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', 'BadCombo',
+        '--language', 'Python',
+        '--framework', 'OpenAIAgents',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -153,47 +121,29 @@ describe('add agent command', () => {
 
     it('rejects duplicate agent name', async () => {
       const agentName = 'DupeAgent';
-
+      
       // First creation should succeed
-      const first = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          agentName,
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projectDir
-      );
+      const first = await runCLI([
+        'add', 'agent',
+        '--name', agentName,
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projectDir);
       assert.strictEqual(first.exitCode, 0, `First should succeed: ${first.stdout}`);
 
       // Second creation should fail
-      const second = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          agentName,
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projectDir
-      );
+      const second = await runCLI([
+        'add', 'agent',
+        '--name', agentName,
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(second.exitCode, 1);
       const json = JSON.parse(second.stdout);
@@ -206,31 +156,21 @@ describe('add agent command', () => {
     it('registers BYO agent', async () => {
       const agentName = `ByoAgent${Date.now()}`;
       const codeDir = 'existing-agent';
-
+      
       // Create existing code directory
       await mkdir(join(projectDir, codeDir), { recursive: true });
       await writeFile(join(projectDir, codeDir, 'main.py'), '# existing code\n');
 
-      const result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          agentName,
-          '--type',
-          'byo',
-          '--code-location',
-          codeDir,
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', agentName,
+        '--type', 'byo',
+        '--code-location', codeDir,
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);
 
@@ -246,24 +186,15 @@ describe('add agent command', () => {
     });
 
     it('requires code-location for BYO path', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'NoByo',
-          '--type',
-          'byo',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'agent',
+        '--name', 'NoByo',
+        '--type', 'byo',
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);

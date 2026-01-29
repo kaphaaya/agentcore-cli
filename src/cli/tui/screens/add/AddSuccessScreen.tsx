@@ -1,4 +1,4 @@
-import { type NextStep, NextSteps, Panel, Screen } from '../../components';
+import { GradientText, type NextStep, NextSteps, Screen } from '../../components';
 import { Box, Text } from 'ink';
 import React from 'react';
 
@@ -10,10 +10,14 @@ const ADD_SUCCESS_STEPS: NextStep[] = [
 interface AddSuccessScreenProps {
   /** Whether running in interactive TUI mode */
   isInteractive: boolean;
-  /** Success message (shown in green) */
+  /** Success message (shown in green when complete) */
   message: string;
   /** Optional detail text */
   detail?: string;
+  /** Loading state - shows gradient animation instead of success */
+  loading?: boolean;
+  /** Loading message to show with gradient */
+  loadingMessage?: string;
   /** Called when "Add another resource" is selected */
   onAddAnother: () => void;
   /** Called when "Attach resources" is selected */
@@ -26,6 +30,8 @@ export function AddSuccessScreen({
   isInteractive,
   message,
   detail,
+  loading,
+  loadingMessage,
   onAddAnother,
   onAttach,
   onExit,
@@ -38,31 +44,43 @@ export function AddSuccessScreen({
     }
   };
 
-  // Non-interactive mode is handled by parent's useEffect that exits on success states
-  // This component just renders the success message
+  // Disable exit while loading
+  const handleExit = loading ? () => {} : onExit;
+
+  // Non-interactive mode - just show success message
   if (!isInteractive) {
     return (
-      <Screen title="Success" onExit={onExit}>
-        <Panel borderColor="green">
-          <Box flexDirection="column" gap={1}>
-            <Text color="green">{message}</Text>
-            {detail && <Text>{detail}</Text>}
-          </Box>
-        </Panel>
+      <Screen title={loading ? 'Add Resource' : 'Success'} onExit={handleExit}>
+        <Box flexDirection="column">
+          {loading ? (
+            <GradientText text={loadingMessage || 'Processing...'} />
+          ) : (
+            <>
+              <Text color="green">✓ {message}</Text>
+              {detail && <Text>{detail}</Text>}
+            </>
+          )}
+        </Box>
       </Screen>
     );
   }
 
   return (
-    <Screen title="Success" onExit={onExit}>
+    <Screen title={loading ? 'Add Resource' : 'Success'} onExit={handleExit}>
       <Box flexDirection="column" gap={1}>
-        <Panel borderColor="green">
-          <Box flexDirection="column" gap={1}>
-            <Text color="green">{message}</Text>
-            {detail && <Text>{detail}</Text>}
-          </Box>
-        </Panel>
-        <NextSteps steps={ADD_SUCCESS_STEPS} isInteractive={true} onSelect={handleSelect} onBack={onExit} />
+        <Box flexDirection="column">
+          {loading ? (
+            <GradientText text={loadingMessage || 'Processing...'} />
+          ) : (
+            <>
+              <Text color="green">✓ {message}</Text>
+              {detail && <Text>{detail}</Text>}
+            </>
+          )}
+        </Box>
+        {!loading && (
+          <NextSteps steps={ADD_SUCCESS_STEPS} isInteractive={true} onSelect={handleSelect} onBack={onExit} />
+        )}
       </Box>
     </Screen>
   );

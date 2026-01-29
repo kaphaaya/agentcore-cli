@@ -1,13 +1,14 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('agent removal cascade', () => {
   let testDir: string;
+  let projectDir: string;
 
   beforeAll(async () => {
     testDir = join(tmpdir(), `agentcore-agent-removal-cascade-${randomUUID()}`);
@@ -27,31 +28,25 @@ describe('agent removal cascade', () => {
       const projDir = join(testDir, projectName);
 
       // Add agent
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'OwnerAgent',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent',
+        '--name', 'OwnerAgent',
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add memory owned by agent
-      result = await runCLI(
-        ['add', 'memory', '--name', 'OwnedMemory', '--strategies', 'SEMANTIC', '--owner', 'OwnerAgent', '--json'],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'memory',
+        '--name', 'OwnedMemory',
+        '--strategies', 'SEMANTIC',
+        '--owner', 'OwnerAgent',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Remove agent with cascade
@@ -73,43 +68,26 @@ describe('agent removal cascade', () => {
       const projDir = join(testDir, projectName);
 
       // Add agent
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'OwnerAgent',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent',
+        '--name', 'OwnerAgent',
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add identity owned by agent
-      result = await runCLI(
-        [
-          'add',
-          'identity',
-          '--name',
-          'OwnedIdentity',
-          '--type',
-          'ApiKeyCredentialProvider',
-          '--api-key',
-          'test-key',
-          '--owner',
-          'OwnerAgent',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'identity',
+        '--name', 'OwnedIdentity',
+        '--type', 'ApiKeyCredentialProvider',
+        '--api-key', 'test-key',
+        '--owner', 'OwnerAgent',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Remove agent with cascade
@@ -131,48 +109,35 @@ describe('agent removal cascade', () => {
       const projDir = join(testDir, projectName);
 
       // Add two agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'AgentA',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent',
+        '--name', 'AgentA',
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'AgentB',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent',
+        '--name', 'AgentB',
+        '--language', 'Python',
+        '--framework', 'Strands',
+        '--model-provider', 'Bedrock',
+        '--memory', 'none',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Attach AgentB to AgentA (AgentA can invoke AgentB)
-      result = await runCLI(['attach', 'agent', '--source', 'AgentA', '--target', 'AgentB', '--json'], projDir);
+      result = await runCLI([
+        'attach', 'agent',
+        '--source', 'AgentA',
+        '--target', 'AgentB',
+        '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Remove AgentB with cascade

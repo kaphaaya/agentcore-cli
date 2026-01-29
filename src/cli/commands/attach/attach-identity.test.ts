@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('attach identity command', () => {
   let testDir: string;
@@ -26,68 +26,42 @@ describe('attach identity command', () => {
     projectDir = join(testDir, projectName);
 
     // Add AgentA (owner)
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentA,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentA,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create AgentA: ${result.stdout} ${result.stderr}`);
     }
 
     // Add AgentB (will attach identity to this one)
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentB,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentB,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create AgentB: ${result.stdout} ${result.stderr}`);
     }
 
     // Add identity owned by AgentA
-    result = await runCLI(
-      [
-        'add',
-        'identity',
-        '--name',
-        testId,
-        '--type',
-        'ApiKeyCredentialProvider',
-        '--api-key',
-        'test-key-123',
-        '--owner',
-        agentA,
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'identity',
+      '--name', testId,
+      '--type', 'ApiKeyCredentialProvider',
+      '--api-key', 'test-key-123',
+      '--owner', agentA,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create TestId: ${result.stdout} ${result.stderr}`);
     }
@@ -107,7 +81,11 @@ describe('attach identity command', () => {
     });
 
     it('requires identity flag', async () => {
-      const result = await runCLI(['attach', 'identity', '--agent', agentB, '--json'], projectDir);
+      const result = await runCLI([
+        'attach', 'identity',
+        '--agent', agentB,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -117,10 +95,12 @@ describe('attach identity command', () => {
 
   describe('attach operations', () => {
     it('attaches identity to agent', async () => {
-      const result = await runCLI(
-        ['attach', 'identity', '--agent', agentB, '--identity', testId, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'identity',
+        '--agent', agentB,
+        '--identity', testId,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -137,10 +117,12 @@ describe('attach identity command', () => {
     });
 
     it('rejects non-existent agent', async () => {
-      const result = await runCLI(
-        ['attach', 'identity', '--agent', 'NonExistent', '--identity', testId, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'attach', 'identity',
+        '--agent', 'NonExistent',
+        '--identity', testId,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);

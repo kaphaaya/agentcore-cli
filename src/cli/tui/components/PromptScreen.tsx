@@ -106,6 +106,7 @@ export function SuccessPrompt({
 
 /**
  * Error prompt - shows an error message with back/exit actions.
+ * Uses plain text styling (no box) to match success screen pattern.
  */
 export function ErrorPrompt({
   message,
@@ -118,17 +119,26 @@ export function ErrorPrompt({
   onBack?: () => void;
   onExit?: () => void;
 }) {
+  useInput((input, key) => {
+    if (key.escape || input === 'q' || input === 'n') {
+      onExit?.();
+      return;
+    }
+    if (key.return || input === 'y' || input === 'b') {
+      onBack?.();
+    }
+  });
+
   return (
-    <PromptScreen
-      helpText="Enter/B to go back, Esc/Q to exit"
-      onConfirm={onBack}
-      onBack={onBack}
-      onExit={onExit}
-      borderColor="red"
-    >
-      <Text color="red">{message}</Text>
-      {detail && <Text>{detail}</Text>}
-    </PromptScreen>
+    <ScreenLayout>
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="column">
+          <Text color="red">✗ {message}</Text>
+          {detail && <Text>{detail}</Text>}
+        </Box>
+        <Text dimColor>Enter/B to go back, Esc/Q to exit</Text>
+      </Box>
+    </ScreenLayout>
   );
 }
 

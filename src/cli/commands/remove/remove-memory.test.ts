@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('remove memory command', () => {
   let testDir: string;
@@ -26,56 +26,41 @@ describe('remove memory command', () => {
     projectDir = join(testDir, projectName);
 
     // Add owner agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        ownerAgent,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', ownerAgent,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create owner agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add user agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        userAgent,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', userAgent,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create user agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add memory
-    result = await runCLI(
-      ['add', 'memory', '--name', memoryName, '--strategies', 'SEMANTIC', '--owner', ownerAgent, '--json'],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'memory',
+      '--name', memoryName,
+      '--strategies', 'SEMANTIC',
+      '--owner', ownerAgent,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create memory: ${result.stdout} ${result.stderr}`);
     }
@@ -107,10 +92,13 @@ describe('remove memory command', () => {
     it('removes memory without users', async () => {
       // Add a temp memory to remove
       const tempMem = `temp-mem-${Date.now()}`;
-      await runCLI(
-        ['add', 'memory', '--name', tempMem, '--strategies', 'SEMANTIC', '--owner', ownerAgent, '--json'],
-        projectDir
-      );
+      await runCLI([
+        'add', 'memory',
+        '--name', tempMem,
+        '--strategies', 'SEMANTIC',
+        '--owner', ownerAgent,
+        '--json'
+      ], projectDir);
 
       const result = await runCLI(['remove', 'memory', '--name', tempMem, '--json'], projectDir);
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);
@@ -126,17 +114,19 @@ describe('remove memory command', () => {
 
     it('blocks removal when memory has users', async () => {
       // Attach memory to user agent
-      await runCLI(['attach', 'memory', '--agent', userAgent, '--memory', memoryName, '--json'], projectDir);
+      await runCLI([
+        'attach', 'memory',
+        '--agent', userAgent,
+        '--memory', memoryName,
+        '--json'
+      ], projectDir);
 
       // Try to remove - should fail with restrict policy
       const result = await runCLI(['remove', 'memory', '--name', memoryName, '--json'], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.toLowerCase().includes('use') || json.error.toLowerCase().includes('attached'),
-        `Error: ${json.error}`
-      );
+      assert.ok(json.error.toLowerCase().includes('use') || json.error.toLowerCase().includes('attached'), `Error: ${json.error}`);
     });
   });
 });

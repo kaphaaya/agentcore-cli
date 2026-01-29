@@ -49,7 +49,7 @@ export type AddAgentOutcome = AddAgentCreateResult | AddAgentByoResult | AddAgen
  * Unlike the create flow, this does NOT generate template files.
  * It only creates the schema entry pointing to existing code.
  */
-function mapByoConfigToAgentEnvSpec(config: AddAgentConfig): AgentEnvSpec {
+export function mapByoConfigToAgentEnvSpec(config: AddAgentConfig): AgentEnvSpec {
   return {
     name: config.name,
     id: `${config.name}Agent`,

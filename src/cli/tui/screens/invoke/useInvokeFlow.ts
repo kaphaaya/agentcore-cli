@@ -7,12 +7,19 @@ import type {
 import { invokeAgentRuntimeStreaming } from '../../../aws';
 import { getErrorMessage } from '../../../errors';
 import { InvokeLogger } from '../../../logging';
+import { generateSessionId, saveSessionId } from '../../../operations/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface InvokeConfig {
   agents: { name: string; state: AgentCoreDeployedState }[];
   target: AwsDeploymentTarget;
+  targetName: string;
   projectName: string;
+}
+
+export interface InvokeFlowOptions {
+  initialSessionId?: string;
+  forceNewSession?: boolean;
 }
 
 export interface InvokeFlowState {
@@ -22,17 +29,21 @@ export interface InvokeFlowState {
   messages: { role: 'user' | 'assistant'; content: string }[];
   error: string | null;
   logFilePath: string | null;
+  sessionId: string | null;
   selectAgent: (index: number) => void;
   invoke: (prompt: string) => Promise<void>;
+  newSession: () => void;
 }
 
-export function useInvokeFlow(): InvokeFlowState {
+export function useInvokeFlow(options: InvokeFlowOptions = {}): InvokeFlowState {
+  const { initialSessionId, forceNewSession } = options;
   const [phase, setPhase] = useState<'loading' | 'ready' | 'invoking' | 'error'>('loading');
   const [config, setConfig] = useState<InvokeConfig | null>(null);
   const [selectedAgent, setSelectedAgent] = useState(0);
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [logFilePath, setLogFilePath] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Persistent logger for the session
   const loggerRef = useRef<InvokeLogger | null>(null);
@@ -77,7 +88,28 @@ export function useInvokeFlow(): InvokeFlowState {
           return;
         }
 
-        setConfig({ agents, target: targetConfig, projectName: project.name });
+        setConfig({ agents, target: targetConfig, targetName, projectName: project.name });
+
+        // Initialize session ID
+        if (forceNewSession) {
+          // Generate new session when --new-session flag is used
+          const newId = generateSessionId();
+          setSessionId(newId);
+        } else if (initialSessionId) {
+          // Use provided session ID from --session-id flag
+          setSessionId(initialSessionId);
+        } else {
+          // Use existing session from first agent's deployed state, or generate new
+          const firstAgent = agents[0];
+          const existingSessionId = firstAgent?.state.sessionId;
+          if (existingSessionId) {
+            setSessionId(existingSessionId);
+          } else {
+            const newId = generateSessionId();
+            setSessionId(newId);
+          }
+        }
+
         setPhase('ready');
       } catch (err) {
         setError(getErrorMessage(err));
@@ -85,7 +117,7 @@ export function useInvokeFlow(): InvokeFlowState {
       }
     };
     void load();
-  }, []);
+  }, [initialSessionId, forceNewSession]);
 
   // Track current streaming content to avoid stale closure issues
   const streamingContentRef = useRef('');
@@ -103,6 +135,7 @@ export function useInvokeFlow(): InvokeFlowState {
           agentName: agent.name,
           runtimeArn: agent.state.runtimeArn,
           region: config.target.region,
+          sessionId: sessionId ?? undefined,
         });
         // Store the absolute path for the LogLink component
         setLogFilePath(loggerRef.current.getAbsoluteLogPath());
@@ -118,16 +151,28 @@ export function useInvokeFlow(): InvokeFlowState {
       setPhase('invoking');
       streamingContentRef.current = '';
 
-      logger.logPrompt(prompt);
+      logger.logPrompt(prompt, sessionId ?? undefined);
 
       try {
-        const stream = invokeAgentRuntimeStreaming({
+        const result = await invokeAgentRuntimeStreaming({
           region: config.target.region,
           runtimeArn: agent.state.runtimeArn,
           payload: prompt,
+          sessionId: sessionId ?? undefined,
+          logger, // Pass logger for SSE event debugging
         });
 
-        for await (const chunk of stream) {
+        // Update session ID from response if available
+        if (result.sessionId) {
+          setSessionId(result.sessionId);
+          logger.updateSessionId(result.sessionId);
+          // Persist session ID to deployed state
+          void saveSessionId(agent.name, result.sessionId, config.targetName).catch(() => {
+            // Silently ignore save errors - session will still work for current invocation
+          });
+        }
+
+        for await (const chunk of result.stream) {
           streamingContentRef.current += chunk;
           const currentContent = streamingContentRef.current;
           // Update the last message (assistant) with accumulated content
@@ -159,8 +204,14 @@ export function useInvokeFlow(): InvokeFlowState {
         setPhase('ready');
       }
     },
-    [config, selectedAgent, phase]
+    [config, selectedAgent, phase, sessionId]
   );
+
+  const newSession = useCallback(() => {
+    const newId = generateSessionId();
+    setSessionId(newId);
+    setMessages([]);
+  }, []);
 
   return {
     phase,
@@ -169,7 +220,9 @@ export function useInvokeFlow(): InvokeFlowState {
     messages,
     error,
     logFilePath,
+    sessionId,
     selectAgent: setSelectedAgent,
     invoke,
+    newSession,
   };
 }

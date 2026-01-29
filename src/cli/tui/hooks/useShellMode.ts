@@ -215,7 +215,6 @@ export function useShellMode(options?: UseShellModeOptions): UseShellModeResult 
     }
 
     const newIndex = Math.min(historyIndex + 1, commandHistory.length - 1);
-    // eslint-disable-next-line security/detect-object-injection
     const newCommand = commandHistory[newIndex] ?? '';
     setHistoryIndex(newIndex);
     setCmdState({ text: newCommand, cursor: newCommand.length });
@@ -232,7 +231,6 @@ export function useShellMode(options?: UseShellModeOptions): UseShellModeResult 
       const saved = savedInputRef.current;
       setCmdState({ text: saved, cursor: saved.length });
     } else {
-      // eslint-disable-next-line security/detect-object-injection
       const newCommand = commandHistory[newIndex] ?? '';
       setCmdState({ text: newCommand, cursor: newCommand.length });
     }

@@ -11,6 +11,8 @@ export interface InvokeLoggerOptions {
   runtimeArn: string;
   /** AWS region */
   region: string;
+  /** Session ID for conversation continuity */
+  sessionId?: string;
 }
 
 interface InvokeRequestLog {
@@ -18,6 +20,7 @@ interface InvokeRequestLog {
   agent: string;
   runtimeArn: string;
   region: string;
+  sessionId?: string;
   prompt: string;
 }
 
@@ -105,6 +108,7 @@ AGENTCORE INVOKE LOG
 Agent: ${this.options.agentName}
 Runtime ARN: ${this.options.runtimeArn}
 Region: ${this.options.region}
+Session ID: ${this.options.sessionId ?? 'none'}
 Started: ${this.startTime.toISOString()}
 ${separator}
 
@@ -131,18 +135,28 @@ ${separator}
   /**
    * Log a prompt being sent with full request details
    */
-  logPrompt(prompt: string): void {
+  logPrompt(prompt: string, sessionId?: string): void {
     this.promptStartTime = Date.now();
+    const currentSessionId = sessionId ?? this.options.sessionId;
     this.requestLog = {
       timestamp: new Date().toISOString(),
       agent: this.options.agentName,
       runtimeArn: this.options.runtimeArn,
       region: this.options.region,
+      sessionId: currentSessionId,
       prompt,
     };
 
-    this.appendLine(`[${this.formatTime()}] INVOKE REQUEST`);
+    this.appendLine(`[${this.formatTime()}] INVOKE REQUEST (Session: ${currentSessionId ?? 'none'})`);
     this.appendJson('REQUEST', this.requestLog);
+  }
+
+  /**
+   * Update the session ID (e.g., when received from response)
+   */
+  updateSessionId(sessionId: string): void {
+    this.options.sessionId = sessionId;
+    this.appendLine(`[${this.formatTime()}] SESSION ID UPDATED: ${sessionId}`);
   }
 
   /**
@@ -150,6 +164,14 @@ ${separator}
    */
   logChunk(chunk: string): void {
     this.appendLine(`[${this.formatTime()}] CHUNK: ${chunk.length} chars`);
+  }
+
+  /**
+   * Log a raw SSE event for debugging purposes.
+   * This logs the full SSE line as received from the server.
+   */
+  logSSEEvent(rawLine: string): void {
+    this.appendLine(`[${this.formatTime()}] SSE: ${rawLine}`);
   }
 
   /**

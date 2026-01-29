@@ -8,8 +8,10 @@ interface LogLinkProps {
   filePath: string;
   /** Display text (defaults to relative path from cwd) */
   displayText?: string;
-  /** Whether to show the "Log: " prefix (defaults to true) */
+  /** Whether to show the prefix (defaults to true) */
   showPrefix?: boolean;
+  /** Custom label for prefix (defaults to "Log") */
+  label?: string;
 }
 
 /**
@@ -17,14 +19,14 @@ interface LogLinkProps {
  * Uses ink-link for terminal hyperlink support.
  * Displays a relative path but links to the full file:// URL.
  */
-export function LogLink({ filePath, displayText, showPrefix = true }: LogLinkProps) {
+export function LogLink({ filePath, displayText, showPrefix = true, label = 'Log' }: LogLinkProps) {
   const url = `file://${filePath}`;
   // Show relative path for cleaner display, or use provided displayText
   const text = displayText ?? path.relative(process.cwd(), filePath);
 
   return (
     <Text color="gray">
-      {showPrefix && 'Log: '}
+      {showPrefix && `${label}: `}
       <Link url={url} fallback={false}>
         <Text color="cyan">{text}</Text>
       </Link>

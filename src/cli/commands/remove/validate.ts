@@ -1,4 +1,4 @@
-import type { RemoveAllOptions, RemoveOptions } from './types';
+import type { RemoveOptions, RemoveAllOptions } from './types';
 
 export interface ValidationResult {
   valid: boolean;

@@ -1,4 +1,4 @@
-import { ErrorPrompt, Panel, Screen, SelectScreen, SuccessPrompt } from '../../components';
+import { ErrorPrompt, type NextStep, NextSteps, Panel, Screen, SelectScreen } from '../../components';
 import type { SelectableItem } from '../../components';
 import {
   useAgentAttachments,
@@ -20,7 +20,7 @@ import { AttachMcpRuntimeScreen } from './AttachMcpRuntimeScreen';
 import { AttachMemoryScreen } from './AttachMemoryScreen';
 import type { AttachResourceType } from './AttachScreen';
 import { AttachScreen } from './AttachScreen';
-import { Text } from 'ink';
+import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -353,19 +353,28 @@ export function AttachFlow(props: { onExit: () => void }) {
   }
 
   if (flow.name === 'success') {
+    const attachSuccessSteps: NextStep[] = [
+      { command: 'attach', label: 'Attach another resource' },
+    ];
+
+    const handleSuccessSelect = (step: NextStep) => {
+      if (step.command === 'attach') {
+        void refreshAgents().then(() => {
+          setFlow({ name: 'select-resource', sourceAgent: flow.sourceAgent });
+        });
+      }
+    };
+
     return (
-      <SuccessPrompt
-        message={`Attached ${flow.resourceType}: ${flow.resourceName}`}
-        detail={`${flow.resourceType} attached to agent "${flow.sourceAgent}". Deploy with \`agentcore deploy\`.`}
-        onConfirm={() => {
-          void refreshAgents().then(() => {
-            setFlow({ name: 'select-resource', sourceAgent: flow.sourceAgent });
-          });
-        }}
-        onExit={props.onExit}
-        confirmText="Back to Attach"
-        exitText="Done"
-      />
+      <Screen title="Success" onExit={props.onExit}>
+        <Box flexDirection="column" gap={1}>
+          <Box flexDirection="column">
+            <Text color="green">✓ Attached {flow.resourceType}: {flow.resourceName}</Text>
+            <Text>{flow.resourceType} attached to agent &quot;{flow.sourceAgent}&quot;. Deploy with `agentcore deploy`.</Text>
+          </Box>
+          <NextSteps steps={attachSuccessSteps} isInteractive={true} onSelect={handleSuccessSelect} onBack={props.onExit} />
+        </Box>
+      </Screen>
     );
   }
 

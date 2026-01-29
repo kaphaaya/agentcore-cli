@@ -247,8 +247,8 @@ export async function createGatewayFromWizard(config: AddGatewayConfig): Promise
   return { name: config.name };
 }
 
-function validateMcpToolLanguage(language: string): asserts language is 'Python' | 'TypeScript' {
-  if (language !== 'Python' && language !== 'TypeScript') {
+function validateMcpToolLanguage(language: string): asserts language is 'Python' | 'TypeScript' | 'Other' {
+  if (language !== 'Python' && language !== 'TypeScript' && language !== 'Other') {
     throw new Error(`MCP tools for language "${language}" are not yet supported.`);
   }
 }
@@ -285,6 +285,11 @@ export async function createToolFromWizard(config: AddMcpToolConfig): Promise<Cr
       codeLocation: config.sourcePath as DirectoryPath,
       networkMode: 'PUBLIC',
     };
+
+    // 'Other' language requires container config - not supported for mcp-runtime yet
+    if (config.language === 'Other') {
+      throw new Error('Language "Other" is not yet supported for MCP runtime tools. Use Python or TypeScript.');
+    }
 
     const mcpRuntimeTool: AgentCoreMcpRuntimeTool = {
       name: config.name,
@@ -353,6 +358,11 @@ export async function createToolFromWizard(config: AddMcpToolConfig): Promise<Cr
           throw new Error(`Tool "${toolDef.name}" already exists in gateway "${gateway.name}".`);
         }
       }
+    }
+
+    // 'Other' language requires container config - not supported for gateway tools yet
+    if (config.language === 'Other') {
+      throw new Error('Language "Other" is not yet supported for gateway tools. Use Python or TypeScript.');
     }
 
     // Create a single target with all tool definitions

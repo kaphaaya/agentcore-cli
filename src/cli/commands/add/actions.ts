@@ -1,4 +1,5 @@
-import { APP_DIR, ConfigIO, MCP_APP_SUBDIR, NoProjectError, findConfigRoot, setEnvVar } from '../../../lib';
+import { dirname, join } from 'path';
+import { APP_DIR, ConfigIO, findConfigRoot, MCP_APP_SUBDIR, NoProjectError, setEnvVar } from '../../../lib';
 import type {
   AgentEnvSpec,
   DirectoryPath,
@@ -12,12 +13,9 @@ import type {
 } from '../../../schema';
 import { getErrorMessage } from '../../errors';
 import { setupPythonProject } from '../../operations';
-import {
-  mapGenerateConfigToAgentEnvSpec,
-  mapModelProviderToIdentityProviders,
-  writeAgentToProject,
-} from '../../operations/agent/generate';
-import { computeDefaultIdentityEnvVarName, createIdentityFromWizard } from '../../operations/identity/create-identity';
+import { mapGenerateConfigToAgentEnvSpec, mapModelProviderToIdentityProviders, writeAgentToProject } from '../../operations/agent/generate';
+import { computeDefaultIdentityEnvVarName } from '../../operations/identity/create-identity';
+import { createIdentityFromWizard } from '../../operations/identity/create-identity';
 import { createGatewayFromWizard, createToolFromWizard } from '../../operations/mcp/create-mcp';
 import { createMemoryFromWizard } from '../../operations/memory/create-memory';
 import { createRenderer } from '../../templates';
@@ -26,8 +24,13 @@ import type { AddIdentityConfig } from '../../tui/screens/identity/types';
 import type { AddGatewayConfig, AddMcpToolConfig } from '../../tui/screens/mcp/types';
 import type { AddMemoryConfig, AddMemoryStrategyConfig } from '../../tui/screens/memory/types';
 import { DEFAULT_EVENT_EXPIRY } from '../../tui/screens/memory/types';
-import type { AddAgentResult, AddGatewayResult, AddIdentityResult, AddMcpToolResult, AddMemoryResult } from './types';
-import { dirname, join } from 'path';
+import type {
+  AddAgentResult,
+  AddGatewayResult,
+  AddIdentityResult,
+  AddMcpToolResult,
+  AddMemoryResult,
+} from './types';
 
 // Validated option interfaces
 export interface ValidatedAddAgentOptions {
@@ -109,7 +112,10 @@ export async function handleAddAgent(options: ValidatedAddAgentOptions): Promise
   }
 }
 
-async function handleCreatePath(options: ValidatedAddAgentOptions, configBaseDir: string): Promise<AddAgentResult> {
+async function handleCreatePath(
+  options: ValidatedAddAgentOptions,
+  configBaseDir: string
+): Promise<AddAgentResult> {
   const projectRoot = dirname(configBaseDir);
 
   const generateConfig = {
@@ -145,7 +151,9 @@ async function handleByoPath(
   configIO: ConfigIO,
   configBaseDir: string
 ): Promise<AddAgentResult> {
-  const codeLocation = options.codeLocation!.endsWith('/') ? options.codeLocation! : `${options.codeLocation!}/`;
+  const codeLocation = options.codeLocation!.endsWith('/')
+    ? options.codeLocation!
+    : `${options.codeLocation!}/`;
 
   const agentEnvSpec: AgentEnvSpec = {
     name: options.name,
@@ -182,10 +190,7 @@ async function handleByoPath(
 // Gateway handler
 function buildGatewayConfig(options: ValidatedAddGatewayOptions): AddGatewayConfig {
   const agents = options.agents
-    ? options.agents
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
+    ? options.agents.split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
   const config: AddGatewayConfig = {
@@ -199,14 +204,8 @@ function buildGatewayConfig(options: ValidatedAddGatewayOptions): AddGatewayConf
   if (options.authorizerType === 'CUSTOM_JWT' && options.discoveryUrl) {
     config.jwtConfig = {
       discoveryUrl: options.discoveryUrl,
-      allowedAudience: options
-        .allowedAudience!.split(',')
-        .map(s => s.trim())
-        .filter(Boolean),
-      allowedClients: options
-        .allowedClients!.split(',')
-        .map(s => s.trim())
-        .filter(Boolean),
+      allowedAudience: options.allowedAudience!.split(',').map(s => s.trim()).filter(Boolean),
+      allowedClients: options.allowedClients!.split(',').map(s => s.trim()).filter(Boolean),
     };
   }
 
@@ -240,13 +239,9 @@ function buildMcpToolConfig(options: ValidatedAddMcpToolOptions): AddMcpToolConf
       description,
       inputSchema: { type: 'object' },
     },
-    selectedAgents:
-      options.exposure === 'mcp-runtime'
-        ? options
-            .agents!.split(',')
-            .map(s => s.trim())
-            .filter(Boolean)
-        : [],
+    selectedAgents: options.exposure === 'mcp-runtime'
+      ? options.agents!.split(',').map(s => s.trim()).filter(Boolean)
+      : [],
     gateway: options.exposure === 'behind-gateway' ? options.gateway : undefined,
   };
 }
@@ -264,10 +259,7 @@ export async function handleAddMcpTool(options: ValidatedAddMcpToolOptions): Pro
 // Memory handler
 function buildMemoryConfig(options: ValidatedAddMemoryOptions): AddMemoryConfig {
   const userAgents = options.users
-    ? options.users
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
+    ? options.users.split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
   const strategies: AddMemoryStrategyConfig[] = options.strategies
@@ -304,10 +296,7 @@ export async function handleAddMemory(options: ValidatedAddMemoryOptions): Promi
 // Identity handler
 function buildIdentityConfig(options: ValidatedAddIdentityOptions): AddIdentityConfig {
   const userAgents = options.users
-    ? options.users
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
+    ? options.users.split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
   return {

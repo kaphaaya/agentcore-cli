@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('add mcp-tool command', () => {
   let testDir: string;
@@ -25,30 +25,25 @@ describe('add mcp-tool command', () => {
     projectDir = join(testDir, projectName);
 
     // Add agent for mcp-runtime tests
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentName,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentName,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add gateway for behind-gateway tests
-    result = await runCLI(['add', 'gateway', '--name', gatewayName, '--json'], projectDir);
+    result = await runCLI([
+      'add', 'gateway',
+      '--name', gatewayName,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create gateway: ${result.stdout} ${result.stderr}`);
     }
@@ -68,7 +63,12 @@ describe('add mcp-tool command', () => {
     });
 
     it('requires exposure flag', async () => {
-      const result = await runCLI(['add', 'mcp-tool', '--name', 'test', '--language', 'Python', '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'test',
+        '--language', 'Python',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -76,22 +76,14 @@ describe('add mcp-tool command', () => {
     });
 
     it('validates language', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          'test',
-          '--language',
-          'InvalidLang',
-          '--exposure',
-          'mcp-runtime',
-          '--agents',
-          agentName,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'test',
+        '--language', 'InvalidLang',
+        '--exposure', 'mcp-runtime',
+        '--agents', agentName,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -102,23 +94,15 @@ describe('add mcp-tool command', () => {
     });
 
     it('accepts Other as valid language option', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          'container-tool',
-          '--language',
-          'Other',
-          '--exposure',
-          'mcp-runtime',
-          '--agents',
-          agentName,
-          '--json',
-        ],
-        projectDir
-      );
-
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'container-tool',
+        '--language', 'Other',
+        '--exposure', 'mcp-runtime',
+        '--agents', agentName,
+        '--json'
+      ], projectDir);
+      
       // Should fail with "not yet supported" error, not validation error
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
@@ -133,22 +117,14 @@ describe('add mcp-tool command', () => {
   describe('mcp-runtime', () => {
     it('creates mcp-runtime tool', async () => {
       const toolName = `rttool${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          toolName,
-          '--language',
-          'Python',
-          '--exposure',
-          'mcp-runtime',
-          '--agents',
-          agentName,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', toolName,
+        '--language', 'Python',
+        '--exposure', 'mcp-runtime',
+        '--agents', agentName,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -168,10 +144,13 @@ describe('add mcp-tool command', () => {
     });
 
     it('requires agents for mcp-runtime', async () => {
-      const result = await runCLI(
-        ['add', 'mcp-tool', '--name', 'no-agents', '--language', 'Python', '--exposure', 'mcp-runtime', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'no-agents',
+        '--language', 'Python',
+        '--exposure', 'mcp-runtime',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -179,23 +158,15 @@ describe('add mcp-tool command', () => {
     });
 
     it('returns clear error for Other language with mcp-runtime', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          'runtime-container',
-          '--language',
-          'Other',
-          '--exposure',
-          'mcp-runtime',
-          '--agents',
-          agentName,
-          '--json',
-        ],
-        projectDir
-      );
-
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'runtime-container',
+        '--language', 'Other',
+        '--exposure', 'mcp-runtime',
+        '--agents', agentName,
+        '--json'
+      ], projectDir);
+      
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -206,24 +177,15 @@ describe('add mcp-tool command', () => {
   describe('behind-gateway', () => {
     it('creates behind-gateway tool', async () => {
       const toolName = `gwtool${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          toolName,
-          '--language',
-          'Python',
-          '--exposure',
-          'behind-gateway',
-          '--gateway',
-          gatewayName,
-          '--host',
-          'Lambda',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', toolName,
+        '--language', 'Python',
+        '--exposure', 'behind-gateway',
+        '--gateway', gatewayName,
+        '--host', 'Lambda',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -238,22 +200,14 @@ describe('add mcp-tool command', () => {
     });
 
     it('requires gateway for behind-gateway', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          'no-gw',
-          '--language',
-          'Python',
-          '--exposure',
-          'behind-gateway',
-          '--host',
-          'Lambda',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'no-gw',
+        '--language', 'Python',
+        '--exposure', 'behind-gateway',
+        '--host', 'Lambda',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -261,22 +215,14 @@ describe('add mcp-tool command', () => {
     });
 
     it('requires host for behind-gateway', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          'no-host',
-          '--language',
-          'Python',
-          '--exposure',
-          'behind-gateway',
-          '--gateway',
-          gatewayName,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'no-host',
+        '--language', 'Python',
+        '--exposure', 'behind-gateway',
+        '--gateway', gatewayName,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -284,25 +230,16 @@ describe('add mcp-tool command', () => {
     });
 
     it('returns clear error for Other language with behind-gateway', async () => {
-      const result = await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          'gateway-container',
-          '--language',
-          'Other',
-          '--exposure',
-          'behind-gateway',
-          '--gateway',
-          gatewayName,
-          '--host',
-          'Lambda',
-          '--json',
-        ],
-        projectDir
-      );
-
+      const result = await runCLI([
+        'add', 'mcp-tool',
+        '--name', 'gateway-container',
+        '--language', 'Other',
+        '--exposure', 'behind-gateway',
+        '--gateway', gatewayName,
+        '--host', 'Lambda',
+        '--json'
+      ], projectDir);
+      
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);

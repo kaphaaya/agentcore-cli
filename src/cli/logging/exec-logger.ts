@@ -33,8 +33,8 @@ export class ExecLogger {
     // Use provided baseDir, or auto-discover project root, or fall back to cwd
     const configRoot = options.baseDir ? path.join(options.baseDir, CONFIG_DIR) : findConfigRoot();
     const logsDir = configRoot
-      ? path.join(configRoot, CLI_SYSTEM_DIR, CLI_LOGS_DIR)
-      : path.join(process.cwd(), CONFIG_DIR, CLI_SYSTEM_DIR, CLI_LOGS_DIR);
+      ? path.join(configRoot, CLI_SYSTEM_DIR, CLI_LOGS_DIR, options.command)
+      : path.join(process.cwd(), CONFIG_DIR, CLI_SYSTEM_DIR, CLI_LOGS_DIR, options.command);
 
     // Ensure logs directory exists
     if (!existsSync(logsDir)) {

@@ -1,4 +1,4 @@
-import { type NextStep, NextSteps, Panel, Screen } from '../../components';
+import { LogLink, type NextStep, NextSteps, Screen } from '../../components';
 import { Box, Text } from 'ink';
 import React from 'react';
 
@@ -14,6 +14,8 @@ interface RemoveSuccessScreenProps {
   message: string;
   /** Optional detail text */
   detail?: string;
+  /** Path to the log file showing the schema diff */
+  logFilePath?: string | null;
   /** Called when "Remove another resource" is selected */
   onRemoveAnother: () => void;
   /** Called when "Attach resources" is selected */
@@ -26,6 +28,7 @@ export function RemoveSuccessScreen({
   isInteractive,
   message,
   detail,
+  logFilePath,
   onRemoveAnother,
   onAttach,
   onExit,
@@ -38,16 +41,15 @@ export function RemoveSuccessScreen({
     }
   };
 
-  // Non-interactive mode - just show the success message
+  // Non-interactive mode - just show success message
   if (!isInteractive) {
     return (
       <Screen title="Success" onExit={onExit}>
-        <Panel borderColor="green">
-          <Box flexDirection="column" gap={1}>
-            <Text color="green">{message}</Text>
-            {detail && <Text>{detail}</Text>}
-          </Box>
-        </Panel>
+        <Box flexDirection="column">
+          <Text color="green">✓ {message}</Text>
+          {detail && <Text>{detail}</Text>}
+          {logFilePath && <LogLink filePath={logFilePath} label="Diff" />}
+        </Box>
       </Screen>
     );
   }
@@ -55,12 +57,11 @@ export function RemoveSuccessScreen({
   return (
     <Screen title="Success" onExit={onExit}>
       <Box flexDirection="column" gap={1}>
-        <Panel borderColor="green">
-          <Box flexDirection="column" gap={1}>
-            <Text color="green">{message}</Text>
-            {detail && <Text>{detail}</Text>}
-          </Box>
-        </Panel>
+        <Box flexDirection="column">
+          <Text color="green">✓ {message}</Text>
+          {detail && <Text>{detail}</Text>}
+          {logFilePath && <LogLink filePath={logFilePath} label="Diff" />}
+        </Box>
         <NextSteps steps={REMOVE_SUCCESS_STEPS} isInteractive={true} onSelect={handleSelect} onBack={onExit} />
       </Box>
     </Screen>

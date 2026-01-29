@@ -8,15 +8,22 @@ interface InvokeScreenProps {
   isInteractive: boolean;
   onExit: () => void;
   initialPrompt?: string;
+  initialSessionId?: string;
+  forceNewSession?: boolean;
 }
 
 type Mode = 'select-agent' | 'chat' | 'input';
 
-export function InvokeScreen({ isInteractive, onExit, initialPrompt }: InvokeScreenProps) {
-  const { phase, config, selectedAgent, messages, error, logFilePath, selectAgent, invoke } = useInvokeFlow();
+export function InvokeScreen({
+  isInteractive,
+  onExit,
+  initialPrompt,
+  initialSessionId,
+  forceNewSession,
+}: InvokeScreenProps) {
+  const { phase, config, selectedAgent, messages, error, logFilePath, sessionId, selectAgent, invoke, newSession } =
+    useInvokeFlow({ initialSessionId, forceNewSession });
   const [mode, setMode] = useState<Mode>('select-agent');
-  // Track if we've completed one conversation round (for non-interactive exit)
-  const hasCompletedRound = useRef(false);
 
   // Handle initial prompt - skip agent selection if only one agent
   useEffect(() => {
@@ -33,15 +40,12 @@ export function InvokeScreen({ isInteractive, onExit, initialPrompt }: InvokeScr
     }
   }, [config, phase, initialPrompt, messages.length, invoke, mode]);
 
-  // Non-interactive mode: exit after response completes
+  // Auto-exit when prompt was provided upfront and response completes
   useEffect(() => {
-    if (!isInteractive && phase === 'ready' && mode === 'chat' && messages.length > 0 && hasCompletedRound.current) {
+    if (initialPrompt && phase === 'ready' && mode === 'chat' && messages.length > 0) {
       onExit();
     }
-    if (phase === 'ready' && messages.length > 0) {
-      hasCompletedRound.current = true;
-    }
-  }, [phase, mode, messages.length, isInteractive, onExit]);
+  }, [initialPrompt, phase, mode, messages.length, onExit]);
 
   useInput((input, key) => {
     if (phase === 'loading' || phase === 'error' || !config) return;
@@ -65,6 +69,10 @@ export function InvokeScreen({ isInteractive, onExit, initialPrompt }: InvokeScr
 
     if (mode === 'chat' && input === 'i' && phase === 'ready') {
       setMode('input');
+    }
+
+    if (mode === 'chat' && input === 'n' && phase === 'ready') {
+      newSession();
     }
   });
 
@@ -93,7 +101,9 @@ export function InvokeScreen({ isInteractive, onExit, initialPrompt }: InvokeScr
   const hasResponse = messages.length > 0 && phase === 'ready';
   const helpText = {
     'select-agent': '↑↓ select · Enter confirm · q quit',
-    chat: hasResponse ? `↑↓ scroll · i invoke ${agent?.name} again · q back` : 'i invoke · q back',
+    chat: hasResponse
+      ? `↑↓ scroll · i invoke ${agent?.name} again · n new session · q back`
+      : 'i invoke · n new session · q back',
     input: 'Enter send · Esc cancel',
   }[mode];
 
@@ -113,6 +123,12 @@ export function InvokeScreen({ isInteractive, onExit, initialPrompt }: InvokeScr
         <Text>Target: </Text>
         <Text color="yellow">{config.target.region}</Text>
       </Box>
+      {mode !== 'select-agent' && (
+        <Box>
+          <Text>Session: </Text>
+          <Text color="magenta">{sessionId?.slice(0, 8) ?? 'none'}</Text>
+        </Box>
+      )}
     </Box>
   );
 

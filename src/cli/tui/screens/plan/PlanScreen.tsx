@@ -3,6 +3,7 @@ import type { AgentCoreMcpSpec } from '../../../../schema';
 import {
   AwsTargetConfigUI,
   ConfirmPrompt,
+  LogLink,
   type NextStep,
   NextSteps,
   ResourceGraph,
@@ -42,6 +43,7 @@ export function PlanScreen({ isInteractive, onExit, autoConfirm, onShellCommand 
     cdkToolkitWrapper,
     stackNames,
     switchableIoHost,
+    logFilePath,
     startPlan,
     confirmBootstrap,
     skipBootstrap,
@@ -221,6 +223,11 @@ export function PlanScreen({ isInteractive, onExit, autoConfirm, onShellCommand 
       {allSuccess && context && (
         <Box marginTop={1}>
           <ResourceGraph project={context.projectSpec} mcp={mcpSpec} />
+        </Box>
+      )}
+      {logFilePath && (
+        <Box marginTop={1}>
+          <LogLink filePath={logFilePath} />
         </Box>
       )}
       {allSuccess && cdkToolkitWrapper && context && (

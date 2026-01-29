@@ -1,16 +1,18 @@
-import { GradientText, LogLink, Screen, TextInput } from '../../components';
+import type { AgentEnvSpec } from '../../../../schema';
+import { getDevSupportedAgents, loadProjectConfig } from '../../../operations/dev';
+import { GradientText, LogLink, Panel, Screen, SelectList, TextInput } from '../../components';
 import { type ConversationMessage, useDevServer } from '../../hooks/useDevServer';
 import { Box, Text, useInput, useStdout } from 'ink';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-type Mode = 'chat' | 'input';
+type Mode = 'select-agent' | 'chat' | 'input';
 
 interface DevScreenProps {
-  /** Whether running in interactive TUI mode (from App.tsx) vs CLI mode */
-  isInteractive: boolean;
   onBack: () => void;
   workingDir?: string;
   port?: number;
+  /** Pre-selected agent name (from CLI --agent flag) */
+  agentName?: string;
 }
 
 /**
@@ -95,7 +97,7 @@ function wrapText(text: string, maxWidth: number): string[] {
 }
 
 export function DevScreen(props: DevScreenProps) {
-  const [mode, setMode] = useState<Mode>('chat');
+  const [mode, setMode] = useState<Mode>('select-agent');
   const [scrollOffset, setScrollOffset] = useState(0);
   // Track if user manually scrolled up (false = auto-scroll to bottom)
   const [userScrolled, setUserScrolled] = useState(false);
@@ -103,7 +105,45 @@ export function DevScreen(props: DevScreenProps) {
   // Track when we just cancelled input to prevent double-escape quit
   const justCancelledRef = useRef(false);
 
+  // Agent selection state
+  const [supportedAgents, setSupportedAgents] = useState<AgentEnvSpec[]>([]);
+  const [selectedAgentIndex, setSelectedAgentIndex] = useState(0);
+  const [selectedAgentName, setSelectedAgentName] = useState<string | undefined>(props.agentName);
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
+
   const workingDir = props.workingDir ?? process.cwd();
+
+  // Load project and get supported agents
+  useEffect(() => {
+    const load = async () => {
+      const project = await loadProjectConfig(workingDir);
+      const agents = getDevSupportedAgents(project);
+      setSupportedAgents(agents);
+
+      // If agent name was provided via CLI, validate it
+      if (props.agentName) {
+        const found = agents.find(a => a.name === props.agentName);
+        if (found) {
+          setSelectedAgentName(props.agentName);
+          setMode('chat');
+        } else if (agents.length > 0) {
+          // Agent not found or not supported, show selection
+          setSelectedAgentName(undefined);
+        }
+      } else if (agents.length === 1 && agents[0]) {
+        // Auto-select if only one agent
+        setSelectedAgentName(agents[0].name);
+        setMode('chat');
+      } else if (agents.length === 0) {
+        // No supported agents, will show error via useDevServer
+        setMode('chat');
+      }
+
+      setAgentsLoaded(true);
+    };
+    void load();
+  }, [workingDir, props.agentName]);
+
   const {
     status,
     isStreaming,
@@ -120,6 +160,7 @@ export function DevScreen(props: DevScreenProps) {
   } = useDevServer({
     workingDir,
     port: props.port ?? 8080,
+    agentName: selectedAgentName,
   });
 
   // Calculate available height for conversation display
@@ -182,6 +223,28 @@ export function DevScreen(props: DevScreenProps) {
 
   useInput(
     (input, key) => {
+      // Agent selection mode
+      if (mode === 'select-agent') {
+        if (key.escape || input === 'q') {
+          props.onBack();
+          return;
+        }
+        if (key.upArrow) {
+          setSelectedAgentIndex(prev => (prev - 1 + supportedAgents.length) % supportedAgents.length);
+        }
+        if (key.downArrow) {
+          setSelectedAgentIndex(prev => (prev + 1) % supportedAgents.length);
+        }
+        if (key.return) {
+          const agent = supportedAgents[selectedAgentIndex];
+          if (agent) {
+            setSelectedAgentName(agent.name);
+            setMode('chat');
+          }
+        }
+        return;
+      }
+
       // In chat mode
       if (mode === 'chat') {
         // Esc or q to quit (but skip if we just cancelled from input mode)
@@ -189,6 +252,14 @@ export function DevScreen(props: DevScreenProps) {
           if (justCancelledRef.current) {
             // Skip this escape - it's from the input cancel
             justCancelledRef.current = false;
+            return;
+          }
+          // If multiple agents, go back to agent selection
+          if (supportedAgents.length > 1) {
+            stop();
+            setMode('select-agent');
+            setSelectedAgentName(undefined);
+            clearConversation();
             return;
           }
           stop();
@@ -231,11 +302,11 @@ export function DevScreen(props: DevScreenProps) {
         }
       }
     },
-    { isActive: mode === 'chat' }
+    { isActive: mode === 'chat' || mode === 'select-agent' }
   );
 
   // Return null while loading
-  if (!configLoaded) {
+  if (!agentsLoaded || (mode !== 'select-agent' && !configLoaded)) {
     return null;
   }
 
@@ -246,13 +317,32 @@ export function DevScreen(props: DevScreenProps) {
 
   // Dynamic help text
   const helpText =
-    mode === 'input'
-      ? 'Enter send · Esc cancel'
-      : isStreaming
-        ? '↑↓ scroll'
-        : conversation.length > 0
-          ? '↑↓ scroll · Enter invoke · C clear · R restart · Esc quit'
-          : 'Enter to send a message · R restart · Esc quit';
+    mode === 'select-agent'
+      ? '↑↓ select · Enter confirm · q quit'
+      : mode === 'input'
+        ? 'Enter send · Esc cancel'
+        : isStreaming
+          ? '↑↓ scroll'
+          : conversation.length > 0
+            ? `↑↓ scroll · Enter invoke · C clear · R restart · ${supportedAgents.length > 1 ? 'Esc back' : 'Esc quit'}`
+            : `Enter to send a message · R restart · ${supportedAgents.length > 1 ? 'Esc back' : 'Esc quit'}`;
+
+  // Agent selection screen
+  if (mode === 'select-agent') {
+    const agentItems = supportedAgents.map((agent, i) => ({
+      id: String(i),
+      title: agent.name,
+      description: `${agent.targetLanguage} · ${agent.runtime.artifact}`,
+    }));
+
+    return (
+      <Screen title="Dev Server" onExit={props.onBack} helpText={helpText}>
+        <Panel title="Select Agent" fullWidth>
+          <SelectList items={agentItems} selectedIndex={selectedAgentIndex} />
+        </Panel>
+      </Screen>
+    );
+  }
 
   const headerContent = (
     <Box flexDirection="column">

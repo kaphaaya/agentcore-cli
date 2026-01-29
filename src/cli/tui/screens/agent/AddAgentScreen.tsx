@@ -166,10 +166,7 @@ export function AddAgentScreen({ existingAgentNames, onComplete, onExit }: AddAg
   const byoCurrentIndex = byoSteps.indexOf(byoStep);
 
   // BYO language options (include "Other" for BYO path)
-  const languageItems: SelectableItem[] = useMemo(
-    () => LANGUAGE_OPTIONS.map(o => ({ id: o.id, title: o.title, disabled: o.disabled })),
-    []
-  );
+  const languageItems: SelectableItem[] = useMemo(() => LANGUAGE_OPTIONS.map(o => ({ id: o.id, title: o.title })), []);
 
   const frameworkItems: SelectableItem[] = useMemo(
     () => FRAMEWORK_OPTIONS.map(o => ({ id: o.id, title: o.title, description: o.description })),
@@ -221,7 +218,6 @@ export function AddAgentScreen({ existingAgentNames, onComplete, onExit }: AddAg
     },
     onExit: handleByoBack,
     isActive: isByoPath && byoStep === 'language',
-    isDisabled: item => item.disabled ?? false,
   });
 
   const frameworkNav = useListNavigation({

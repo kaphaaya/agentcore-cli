@@ -23,6 +23,8 @@ interface PlanFlowState {
   stackNames: string[];
   /** Switchable ioHost for deploy output */
   switchableIoHost: SwitchableIoHost | null;
+  /** Path to the log file */
+  logFilePath: string | null;
   startPlan: () => void;
   confirmBootstrap: () => void;
   skipBootstrap: () => void;
@@ -114,6 +116,7 @@ export function usePlanFlow(options: PlanFlowOptions = {}): PlanFlowState {
     cdkToolkitWrapper: preflight.cdkToolkitWrapper,
     stackNames: preflight.stackNames,
     switchableIoHost: preflight.switchableIoHost,
+    logFilePath: logger.getRelativeLogPath(),
     startPlan,
     confirmBootstrap: preflight.confirmBootstrap,
     skipBootstrap: preflight.skipBootstrap,

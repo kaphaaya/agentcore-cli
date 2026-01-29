@@ -49,7 +49,44 @@ export async function detectAccount(): Promise<string | null> {
     const command = new GetCallerIdentityCommand({});
     const response = await client.send(command);
     return response.Account ?? null;
-  } catch {
+  } catch (err) {
+    // Check for specific credential errors to provide better messages
+    const errorName = (err as { name?: string })?.name;
+    const errorCode = (err as { Code?: string })?.Code;
+    const code = errorName ?? errorCode;
+
+    // Expired SSO token
+    if (code === 'ExpiredTokenException' || code === 'ExpiredToken') {
+      throw new AwsCredentialsError(
+        'AWS credentials expired.',
+        'AWS credentials expired.\n\n' +
+          'To fix this:\n' +
+          '  Run: aws login'
+      );
+    }
+
+    // Invalid credentials
+    if (code === 'InvalidClientTokenId' || code === 'SignatureDoesNotMatch') {
+      throw new AwsCredentialsError(
+        'AWS credentials are invalid.',
+        'AWS credentials are invalid.\n\n' +
+          'To fix this:\n' +
+          '  1. Check your AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY\n' +
+          '  2. Or run: aws login'
+      );
+    }
+
+    // Access denied (credentials work but lack permissions)
+    if (code === 'AccessDenied' || code === 'AccessDeniedException') {
+      throw new AwsCredentialsError(
+        'AWS credentials lack required permissions.',
+        'AWS credentials lack required permissions for STS:GetCallerIdentity.\n\n' +
+          'To fix this:\n' +
+          '  Ensure your IAM user/role has sts:GetCallerIdentity permission'
+      );
+    }
+
+    // Other errors - return null to trigger generic "no credentials" message
     return null;
   }
 }

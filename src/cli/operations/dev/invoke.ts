@@ -1,3 +1,8 @@
+/** Logger interface for SSE events */
+export interface SSELogger {
+  logSSEEvent(rawLine: string): void;
+}
+
 /**
  * Parse a single SSE data line and extract the content.
  */
@@ -61,12 +66,26 @@ function extractResult(text: string): string {
   }
 }
 
+export interface InvokeStreamingOptions {
+  port: number;
+  message: string;
+  /** Optional logger for SSE event debugging */
+  logger?: SSELogger;
+}
+
 /**
  * Invokes an agent on the local dev server and streams the response.
  * Yields text chunks as they arrive from the SSE stream.
  * Also handles non-streaming JSON responses from frameworks that don't support streaming.
  */
-export async function* invokeAgentStreaming(port: number, message: string): AsyncGenerator<string, void, unknown> {
+export async function* invokeAgentStreaming(
+  portOrOptions: number | InvokeStreamingOptions,
+  message?: string
+): AsyncGenerator<string, void, unknown> {
+  // Support both old signature (port, message) and new signature (options)
+  const options: InvokeStreamingOptions =
+    typeof portOrOptions === 'number' ? { port: portOrOptions, message: message! } : portOrOptions;
+  const { port, message: msg, logger } = options;
   const maxRetries = 5;
   const baseDelay = 500;
   let lastError: Error | null = null;
@@ -76,7 +95,7 @@ export async function* invokeAgentStreaming(port: number, message: string): Asyn
       const res = await fetch(`http://localhost:${port}/invocations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: message }),
+        body: JSON.stringify({ prompt: msg }),
       });
 
       if (!res.body) {
@@ -105,6 +124,10 @@ export async function* invokeAgentStreaming(port: number, message: string): Asyn
           buffer = lines.pop() ?? '';
 
           for (const line of lines) {
+            // Log raw SSE line if logger provided
+            if (logger && line.trim()) {
+              logger.logSSEEvent(line);
+            }
             const { content, error } = parseSSELine(line);
             if (error) {
               yield `Error: ${error}`;
@@ -119,6 +142,10 @@ export async function* invokeAgentStreaming(port: number, message: string): Asyn
 
         // Process remaining buffer for SSE content
         if (buffer) {
+          // Log raw SSE line if logger provided
+          if (logger && buffer.trim()) {
+            logger.logSSEEvent(buffer);
+          }
           const { content, error } = parseSSELine(buffer);
           if (error) {
             yield `Error: ${error}`;

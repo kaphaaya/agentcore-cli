@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('remove mcp-tool command', () => {
   let testDir: string;
@@ -27,24 +27,15 @@ describe('remove mcp-tool command', () => {
     projectDir = join(testDir, projectName);
 
     // Add agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        agentName,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', agentName,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create agent: ${result.stdout} ${result.stderr}`);
     }
@@ -56,45 +47,28 @@ describe('remove mcp-tool command', () => {
     }
 
     // Add mcp-runtime tool
-    result = await runCLI(
-      [
-        'add',
-        'mcp-tool',
-        '--name',
-        runtimeToolName,
-        '--language',
-        'Python',
-        '--exposure',
-        'mcp-runtime',
-        '--agents',
-        agentName,
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'mcp-tool',
+      '--name', runtimeToolName,
+      '--language', 'Python',
+      '--exposure', 'mcp-runtime',
+      '--agents', agentName,
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create runtime tool: ${result.stdout} ${result.stderr}`);
     }
 
     // Add behind-gateway tool
-    result = await runCLI(
-      [
-        'add',
-        'mcp-tool',
-        '--name',
-        gatewayToolName,
-        '--language',
-        'Python',
-        '--exposure',
-        'behind-gateway',
-        '--gateway',
-        gatewayName,
-        '--host',
-        'Lambda',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'mcp-tool',
+      '--name', gatewayToolName,
+      '--language', 'Python',
+      '--exposure', 'behind-gateway',
+      '--gateway', gatewayName,
+      '--host', 'Lambda',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create gateway tool: ${result.stdout} ${result.stderr}`);
     }
@@ -126,22 +100,14 @@ describe('remove mcp-tool command', () => {
     it('removes mcp-runtime tool and cleans up agent references', async () => {
       // Add a temp tool to remove
       const tempTool = `temp-rt-${Date.now()}`;
-      await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          tempTool,
-          '--language',
-          'Python',
-          '--exposure',
-          'mcp-runtime',
-          '--agents',
-          agentName,
-          '--json',
-        ],
-        projectDir
-      );
+      await runCLI([
+        'add', 'mcp-tool',
+        '--name', tempTool,
+        '--language', 'Python',
+        '--exposure', 'mcp-runtime',
+        '--agents', agentName,
+        '--json'
+      ], projectDir);
 
       const result = await runCLI(['remove', 'mcp-tool', '--name', tempTool, '--json'], projectDir);
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);
@@ -165,24 +131,15 @@ describe('remove mcp-tool command', () => {
     it('removes behind-gateway tool from gateway targets', async () => {
       // Add a temp tool to remove
       const tempTool = `temp-gw-${Date.now()}`;
-      await runCLI(
-        [
-          'add',
-          'mcp-tool',
-          '--name',
-          tempTool,
-          '--language',
-          'Python',
-          '--exposure',
-          'behind-gateway',
-          '--gateway',
-          gatewayName,
-          '--host',
-          'Lambda',
-          '--json',
-        ],
-        projectDir
-      );
+      await runCLI([
+        'add', 'mcp-tool',
+        '--name', tempTool,
+        '--language', 'Python',
+        '--exposure', 'behind-gateway',
+        '--gateway', gatewayName,
+        '--host', 'Lambda',
+        '--json'
+      ], projectDir);
 
       const result = await runCLI(['remove', 'mcp-tool', '--name', tempTool, '--json'], projectDir);
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}`);

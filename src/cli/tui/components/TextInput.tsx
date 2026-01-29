@@ -96,6 +96,7 @@ export function TextInput({
   const hasInput = trimmed.length > 0;
   const hasValidation = Boolean(schema ?? customValidation);
   const showCheckmark = hasInput && isValid && hasValidation;
+  const showInvalidMark = hasInput && !isValid && hasValidation;
 
   const displayValue = mask ? mask.repeat(value.length) : value;
 
@@ -107,8 +108,9 @@ export function TextInput({
         <Text>{displayValue ?? (placeholder ? <Text dimColor>{placeholder}</Text> : null)}</Text>
         <Cursor />
         {showCheckmark && <Text color="green"> ✓</Text>}
+        {showInvalidMark && <Text color="red"> ✗</Text>}
       </Box>
-      {showError && validationErrorMsg && <Text color="red">{validationErrorMsg}</Text>}
+      {(showError || showInvalidMark) && validationErrorMsg && <Text color="red">{validationErrorMsg}</Text>}
     </Box>
   );
 }

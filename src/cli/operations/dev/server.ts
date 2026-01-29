@@ -1,4 +1,5 @@
-import { type ChildProcess, spawn } from 'child_process';
+import { type ChildProcess, spawn, spawnSync } from 'child_process';
+import { existsSync } from 'fs';
 import { createServer } from 'net';
 import { join } from 'path';
 
@@ -27,6 +28,49 @@ function convertEntrypointToModule(entrypoint: string): string {
   return `${path}:app`;
 }
 
+/**
+ * Ensures a Python virtual environment exists and has dependencies installed.
+ * Creates the venv and runs uv sync if .venv doesn't exist.
+ * Returns true if successful, false otherwise.
+ */
+function ensurePythonVenv(cwd: string, onLog: (level: LogLevel, message: string) => void): boolean {
+  const venvPath = join(cwd, '.venv');
+  const uvicornPath = join(venvPath, 'bin', 'uvicorn');
+
+  // Check if venv and uvicorn already exist
+  if (existsSync(uvicornPath)) {
+    return true;
+  }
+
+  onLog('system', 'Setting up Python environment...');
+
+  // Create venv if it doesn't exist
+  if (!existsSync(venvPath)) {
+    onLog('info', 'Creating virtual environment...');
+    const venvResult = spawnSync('uv', ['venv'], { cwd, stdio: 'pipe' });
+    if (venvResult.status !== 0) {
+      onLog('error', `Failed to create venv: ${venvResult.stderr?.toString() || 'unknown error'}`);
+      return false;
+    }
+  }
+
+  // Install dependencies using uv sync (reads from pyproject.toml)
+  onLog('info', 'Installing dependencies...');
+  const syncResult = spawnSync('uv', ['sync'], { cwd, stdio: 'pipe' });
+  if (syncResult.status !== 0) {
+    // Fallback: try installing uvicorn directly if uv sync fails
+    onLog('warn', 'uv sync failed, trying direct uvicorn install...');
+    const pipResult = spawnSync('uv', ['pip', 'install', 'uvicorn'], { cwd, stdio: 'pipe' });
+    if (pipResult.status !== 0) {
+      onLog('error', `Failed to install dependencies: ${pipResult.stderr?.toString() || 'unknown error'}`);
+      return false;
+    }
+  }
+
+  onLog('system', 'Python environment ready');
+  return true;
+}
+
 export interface SpawnDevServerOptions {
   module: string;
   cwd: string;
@@ -37,9 +81,15 @@ export interface SpawnDevServerOptions {
   envVars?: Record<string, string>;
 }
 
-export function spawnDevServer(options: SpawnDevServerOptions): ChildProcess {
+export function spawnDevServer(options: SpawnDevServerOptions): ChildProcess | null {
   const { module, cwd, port, isPython, callbacks, envVars = {} } = options;
   const { onLog, onExit } = callbacks;
+
+  // For Python, ensure venv exists before starting
+  if (isPython && !ensurePythonVenv(cwd, onLog)) {
+    onExit(1);
+    return null;
+  }
 
   // For Python, use the venv's uvicorn directly to avoid PATH issues
   const cmd = isPython ? join(cwd, '.venv', 'bin', 'uvicorn') : 'bun';

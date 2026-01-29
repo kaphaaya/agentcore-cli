@@ -27,7 +27,7 @@ export interface ConversationMessage {
 
 const MAX_LOG_ENTRIES = 50;
 
-export function useDevServer(options: { workingDir: string; port: number }) {
+export function useDevServer(options: { workingDir: string; port: number; agentName?: string }) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [status, setStatus] = useState<ServerStatus>('starting');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -43,6 +43,8 @@ export function useDevServer(options: { workingDir: string; port: number }) {
 
   const serverRef = useRef<ChildProcess | null>(null);
   const loggerRef = useRef<DevLogger | null>(null);
+  // Track instance ID to ignore callbacks from stale server instances
+  const instanceIdRef = useRef(0);
 
   const addLog = (level: LogEntry['level'], message: string) => {
     setLogs(prev => [...prev.slice(-MAX_LOG_ENTRIES), { level, message }]);
@@ -70,13 +72,17 @@ export function useDevServer(options: { workingDir: string; port: number }) {
   }, [options.workingDir]);
 
   const config: DevConfig = useMemo(
-    () => getDevConfig(options.workingDir, project, configRoot),
-    [options.workingDir, project, configRoot]
+    () => getDevConfig(options.workingDir, project, configRoot, options.agentName),
+    [options.workingDir, project, configRoot, options.agentName]
   );
 
   // Start server when config is loaded
   useEffect(() => {
     if (!configLoaded) return;
+
+    // Increment instance ID to track this server instance
+    instanceIdRef.current += 1;
+    const currentInstanceId = instanceIdRef.current;
 
     const startServer = async () => {
       // Initialize file logger for this dev session
@@ -100,6 +106,9 @@ export function useDevServer(options: { workingDir: string; port: number }) {
         envVars,
         callbacks: {
           onLog: (level, message) => {
+            // Ignore callbacks from stale server instances
+            if (instanceIdRef.current !== currentInstanceId) return;
+
             // Detect when server is actually ready (only once)
             if (
               !serverReady &&
@@ -113,6 +122,9 @@ export function useDevServer(options: { workingDir: string; port: number }) {
             }
           },
           onExit: code => {
+            // Ignore exit events from stale server instances
+            if (instanceIdRef.current !== currentInstanceId) return;
+
             setStatus(code === 0 ? 'stopped' : 'error');
             addLog('system', `Server exited (code ${code})`);
           },
@@ -145,7 +157,12 @@ export function useDevServer(options: { workingDir: string; port: number }) {
     let responseContent = '';
 
     try {
-      const stream = invokeAgentStreaming(actualPort, message);
+      // Pass logger to capture raw SSE events for debugging
+      const stream = invokeAgentStreaming({
+        port: actualPort,
+        message,
+        logger: loggerRef.current ?? undefined,
+      });
 
       for await (const chunk of stream) {
         responseContent += chunk;

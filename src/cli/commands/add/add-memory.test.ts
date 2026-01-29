@@ -1,10 +1,10 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('add memory command', () => {
   let testDir: string;
@@ -25,47 +25,29 @@ describe('add memory command', () => {
     projectDir = join(testDir, projectName);
 
     // Add owner agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        ownerAgent,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', ownerAgent,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create owner agent: ${result.stdout} ${result.stderr}`);
     }
 
     // Add user agent
-    result = await runCLI(
-      [
-        'add',
-        'agent',
-        '--name',
-        userAgent,
-        '--language',
-        'Python',
-        '--framework',
-        'Strands',
-        '--model-provider',
-        'Bedrock',
-        '--memory',
-        'none',
-        '--json',
-      ],
-      projectDir
-    );
+    result = await runCLI([
+      'add', 'agent',
+      '--name', userAgent,
+      '--language', 'Python',
+      '--framework', 'Strands',
+      '--model-provider', 'Bedrock',
+      '--memory', 'none',
+      '--json'
+    ], projectDir);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to create user agent: ${result.stdout} ${result.stderr}`);
     }
@@ -85,7 +67,11 @@ describe('add memory command', () => {
     });
 
     it('requires strategies flag', async () => {
-      const result = await runCLI(['add', 'memory', '--name', 'test', '--json'], projectDir);
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', 'test',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -93,10 +79,12 @@ describe('add memory command', () => {
     });
 
     it('requires owner flag', async () => {
-      const result = await runCLI(
-        ['add', 'memory', '--name', 'test', '--strategies', 'SEMANTIC', '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', 'test',
+        '--strategies', 'SEMANTIC',
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -104,10 +92,13 @@ describe('add memory command', () => {
     });
 
     it('validates strategy types', async () => {
-      const result = await runCLI(
-        ['add', 'memory', '--name', 'test', '--strategies', 'INVALID', '--owner', ownerAgent, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', 'test',
+        '--strategies', 'INVALID',
+        '--owner', ownerAgent,
+        '--json'
+      ], projectDir);
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
@@ -118,10 +109,13 @@ describe('add memory command', () => {
   describe('memory creation', () => {
     it('creates memory with owner', async () => {
       const memoryName = `mem${Date.now()}`;
-      const result = await runCLI(
-        ['add', 'memory', '--name', memoryName, '--strategies', 'SEMANTIC', '--owner', ownerAgent, '--json'],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', memoryName,
+        '--strategies', 'SEMANTIC',
+        '--owner', ownerAgent,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -139,22 +133,14 @@ describe('add memory command', () => {
 
     it('creates memory with owner and users', async () => {
       const memoryName = `shared${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'memory',
-          '--name',
-          memoryName,
-          '--strategies',
-          'SUMMARIZATION',
-          '--owner',
-          ownerAgent,
-          '--users',
-          userAgent,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', memoryName,
+        '--strategies', 'SUMMARIZATION',
+        '--owner', ownerAgent,
+        '--users', userAgent,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
       const json = JSON.parse(result.stdout);
@@ -163,7 +149,7 @@ describe('add memory command', () => {
 
       // Verify relations
       const projectSpec = JSON.parse(await readFile(join(projectDir, 'agentcore/agentcore.json'), 'utf-8'));
-
+      
       const owner = projectSpec.agents.find((a: { name: string }) => a.name === ownerAgent);
       const ownerMem = owner?.memoryProviders?.find((m: { name: string }) => m.name === memoryName);
       assert.strictEqual(ownerMem?.relation, 'own');
@@ -175,20 +161,13 @@ describe('add memory command', () => {
 
     it('creates memory with multiple strategies', async () => {
       const memoryName = `multi${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'memory',
-          '--name',
-          memoryName,
-          '--strategies',
-          'SEMANTIC,SUMMARIZATION',
-          '--owner',
-          ownerAgent,
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', memoryName,
+        '--strategies', 'SEMANTIC,SUMMARIZATION',
+        '--owner', ownerAgent,
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
 
@@ -203,22 +182,14 @@ describe('add memory command', () => {
 
     it('creates memory with custom expiry', async () => {
       const memoryName = `expiry${Date.now()}`;
-      const result = await runCLI(
-        [
-          'add',
-          'memory',
-          '--name',
-          memoryName,
-          '--strategies',
-          'SEMANTIC',
-          '--owner',
-          ownerAgent,
-          '--expiry',
-          '90',
-          '--json',
-        ],
-        projectDir
-      );
+      const result = await runCLI([
+        'add', 'memory',
+        '--name', memoryName,
+        '--strategies', 'SEMANTIC',
+        '--owner', ownerAgent,
+        '--expiry', '90',
+        '--json'
+      ], projectDir);
 
       assert.strictEqual(result.exitCode, 0, `stdout: ${result.stdout}, stderr: ${result.stderr}`);
 

@@ -1,13 +1,14 @@
-import { runCLI } from '../../../test-utils/index.js';
-import { afterAll, beforeAll, describe, it } from 'bun:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert';
-import { randomUUID } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { runCLI } from '../../../test-utils/index.js';
 
 describe('removal policy restrict', () => {
   let testDir: string;
+  let projectDir: string;
 
   beforeAll(async () => {
     testDir = join(tmpdir(), `agentcore-removal-policy-restrict-${randomUUID()}`);
@@ -27,63 +28,23 @@ describe('removal policy restrict', () => {
       const projDir = join(testDir, projectName);
 
       // Add owner and user agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'Owner',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'Owner', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'User',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'User', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add memory with user
-      result = await runCLI(
-        [
-          'add',
-          'memory',
-          '--name',
-          'SharedMem',
-          '--strategies',
-          'SEMANTIC',
-          '--owner',
-          'Owner',
-          '--users',
-          'User',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'memory', '--name', 'SharedMem', '--strategies', 'SEMANTIC',
+        '--owner', 'Owner', '--users', 'User', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Try to remove memory without cascade - should fail
@@ -91,10 +52,7 @@ describe('removal policy restrict', () => {
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.toLowerCase().includes('use') || json.error.toLowerCase().includes('attached'),
-        `Error: ${json.error}`
-      );
+      assert.ok(json.error.toLowerCase().includes('use') || json.error.toLowerCase().includes('attached'), `Error: ${json.error}`);
     });
 
     it('blocks removal with explicit restrict policy', async () => {
@@ -105,63 +63,23 @@ describe('removal policy restrict', () => {
       const projDir = join(testDir, projectName);
 
       // Add owner and user agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'Owner',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'Owner', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'User',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'User', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add memory with user
-      result = await runCLI(
-        [
-          'add',
-          'memory',
-          '--name',
-          'SharedMem',
-          '--strategies',
-          'SEMANTIC',
-          '--owner',
-          'Owner',
-          '--users',
-          'User',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'memory', '--name', 'SharedMem', '--strategies', 'SEMANTIC',
+        '--owner', 'Owner', '--users', 'User', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Try to remove with explicit restrict - should fail
@@ -181,65 +99,23 @@ describe('removal policy restrict', () => {
       const projDir = join(testDir, projectName);
 
       // Add owner and user agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'Owner',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'Owner', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'User',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'User', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Add identity with user
-      result = await runCLI(
-        [
-          'add',
-          'identity',
-          '--name',
-          'SharedId',
-          '--type',
-          'ApiKeyCredentialProvider',
-          '--api-key',
-          'test-key',
-          '--owner',
-          'Owner',
-          '--users',
-          'User',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'identity', '--name', 'SharedId', '--type', 'ApiKeyCredentialProvider',
+        '--api-key', 'test-key', '--owner', 'Owner', '--users', 'User', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Try to remove identity - should fail
@@ -247,10 +123,7 @@ describe('removal policy restrict', () => {
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.toLowerCase().includes('use') || json.error.toLowerCase().includes('attached'),
-        `Error: ${json.error}`
-      );
+      assert.ok(json.error.toLowerCase().includes('use') || json.error.toLowerCase().includes('attached'), `Error: ${json.error}`);
     });
   });
 
@@ -263,48 +136,22 @@ describe('removal policy restrict', () => {
       const projDir = join(testDir, projectName);
 
       // Add two agents
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'AgentA',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'AgentA', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
-      result = await runCLI(
-        [
-          'add',
-          'agent',
-          '--name',
-          'AgentB',
-          '--language',
-          'Python',
-          '--framework',
-          'Strands',
-          '--model-provider',
-          'Bedrock',
-          '--memory',
-          'none',
-          '--json',
-        ],
-        projDir
-      );
+      result = await runCLI([
+        'add', 'agent', '--name', 'AgentB', '--language', 'Python',
+        '--framework', 'Strands', '--model-provider', 'Bedrock', '--memory', 'none', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Attach AgentB to AgentA
-      result = await runCLI(['attach', 'agent', '--source', 'AgentA', '--target', 'AgentB', '--json'], projDir);
+      result = await runCLI([
+        'attach', 'agent', '--source', 'AgentA', '--target', 'AgentB', '--json'
+      ], projDir);
       assert.strictEqual(result.exitCode, 0);
 
       // Try to remove AgentB - should fail with restrict
@@ -312,10 +159,7 @@ describe('removal policy restrict', () => {
       assert.strictEqual(result.exitCode, 1);
       const json = JSON.parse(result.stdout);
       assert.strictEqual(json.success, false);
-      assert.ok(
-        json.error.toLowerCase().includes('reference') || json.error.toLowerCase().includes('use'),
-        `Error: ${json.error}`
-      );
+      assert.ok(json.error.toLowerCase().includes('reference') || json.error.toLowerCase().includes('use'), `Error: ${json.error}`);
     });
   });
 });

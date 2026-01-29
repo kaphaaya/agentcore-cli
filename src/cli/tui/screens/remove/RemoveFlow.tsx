@@ -45,12 +45,12 @@ type FlowState =
   | { name: 'confirm-identity'; identityName: string; preview: RemovalPreview }
   | { name: 'confirm-target'; targetName: string; preview: RemovalPreview }
   | { name: 'loading'; message: string }
-  | { name: 'agent-success'; agentName: string }
-  | { name: 'gateway-success'; gatewayName: string }
-  | { name: 'tool-success'; toolName: string }
-  | { name: 'memory-success'; memoryName: string }
-  | { name: 'identity-success'; identityName: string }
-  | { name: 'target-success'; targetName: string }
+  | { name: 'agent-success'; agentName: string; logFilePath?: string }
+  | { name: 'gateway-success'; gatewayName: string; logFilePath?: string }
+  | { name: 'tool-success'; toolName: string; logFilePath?: string }
+  | { name: 'memory-success'; memoryName: string; logFilePath?: string }
+  | { name: 'identity-success'; identityName: string; logFilePath?: string }
+  | { name: 'target-success'; targetName: string; logFilePath?: string }
   | { name: 'remove-all' }
   | { name: 'error'; message: string };
 
@@ -334,7 +334,7 @@ export function RemoveFlow({
       setFlow({ name: 'loading', message: `Removing agent ${agentName}...` });
       const result = await removeAgentOp(agentName, preview);
       if (result.ok) {
-        pendingResultRef.current = { name: 'agent-success', agentName };
+        pendingResultRef.current = { name: 'agent-success', agentName, logFilePath: result.logFilePath };
       } else {
         pendingResultRef.current = { name: 'error', message: result.error };
       }
@@ -350,7 +350,7 @@ export function RemoveFlow({
       setFlow({ name: 'loading', message: `Removing gateway ${gatewayName}...` });
       const result = await removeGatewayOp(gatewayName, preview);
       if (result.ok) {
-        pendingResultRef.current = { name: 'gateway-success', gatewayName };
+        pendingResultRef.current = { name: 'gateway-success', gatewayName, logFilePath: result.logFilePath };
       } else {
         pendingResultRef.current = { name: 'error', message: result.error };
       }
@@ -366,7 +366,7 @@ export function RemoveFlow({
       setFlow({ name: 'loading', message: `Removing MCP tool ${tool.name}...` });
       const result = await removeMcpToolOp(tool, preview);
       if (result.ok) {
-        pendingResultRef.current = { name: 'tool-success', toolName: tool.name };
+        pendingResultRef.current = { name: 'tool-success', toolName: tool.name, logFilePath: result.logFilePath };
       } else {
         pendingResultRef.current = { name: 'error', message: result.error };
       }
@@ -382,7 +382,7 @@ export function RemoveFlow({
       setFlow({ name: 'loading', message: `Removing memory ${memoryName}...` });
       const result = await removeMemoryOp(memoryName, preview);
       if (result.ok) {
-        pendingResultRef.current = { name: 'memory-success', memoryName };
+        pendingResultRef.current = { name: 'memory-success', memoryName, logFilePath: result.logFilePath };
       } else {
         pendingResultRef.current = { name: 'error', message: result.error };
       }
@@ -398,7 +398,7 @@ export function RemoveFlow({
       setFlow({ name: 'loading', message: `Removing identity ${identityName}...` });
       const result = await removeIdentityOp(identityName, preview);
       if (result.ok) {
-        pendingResultRef.current = { name: 'identity-success', identityName };
+        pendingResultRef.current = { name: 'identity-success', identityName, logFilePath: result.logFilePath };
       } else {
         pendingResultRef.current = { name: 'error', message: result.error };
       }
@@ -414,7 +414,7 @@ export function RemoveFlow({
       setFlow({ name: 'loading', message: `Removing target ${targetName}...` });
       const result = await removeTargetOp(targetName, preview);
       if (result.ok) {
-        pendingResultRef.current = { name: 'target-success', targetName };
+        pendingResultRef.current = { name: 'target-success', targetName, logFilePath: result.logFilePath };
       } else {
         pendingResultRef.current = { name: 'error', message: result.error };
       }
@@ -620,6 +620,7 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed agent: ${flow.agentName}`}
         detail="Agent removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
+        logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();
           void refreshAll().then(() => setFlow({ name: 'select' }));
@@ -636,6 +637,7 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed gateway: ${flow.gatewayName}`}
         detail="Gateway removed from mcp.json. Deploy with `agentcore deploy` to apply changes."
+        logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();
           void refreshAll().then(() => setFlow({ name: 'select' }));
@@ -652,6 +654,7 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed MCP tool: ${flow.toolName}`}
         detail="MCP tool removed. Deploy with `agentcore deploy` to apply changes."
+        logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();
           void refreshAll().then(() => setFlow({ name: 'select' }));
@@ -668,6 +671,7 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed memory: ${flow.memoryName}`}
         detail="Memory provider removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
+        logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();
           void refreshAll().then(() => setFlow({ name: 'select' }));
@@ -684,6 +688,7 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed identity: ${flow.identityName}`}
         detail="Identity provider removed from agentcore.json. Deploy with `agentcore deploy` to apply changes."
+        logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();
           void refreshAll().then(() => setFlow({ name: 'select' }));
@@ -700,6 +705,7 @@ export function RemoveFlow({
         isInteractive={isInteractive}
         message={`Removed target: ${flow.targetName}`}
         detail="Deployment target removed from aws-targets.json."
+        logFilePath={flow.logFilePath}
         onRemoveAnother={() => {
           resetAll();
           void refreshAll().then(() => setFlow({ name: 'select' }));
