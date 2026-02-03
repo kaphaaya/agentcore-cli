@@ -63,6 +63,8 @@ export interface PreflightResult {
   hasCredentialsError: boolean;
   /** Missing credentials that need to be provided */
   missingCredentials: MissingCredential[];
+  /** KMS key ARN used for identity token vault encryption */
+  identityKmsKeyArn?: string;
   startPreflight: () => Promise<void>;
   confirmBootstrap: () => void;
   skipBootstrap: () => void;
@@ -114,6 +116,7 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
   const [missingCredentials, setMissingCredentials] = useState<MissingCredential[]>([]);
   const [runtimeCredentials, setRuntimeCredentials] = useState<SecureCredentials | null>(null);
   const [skipIdentitySetup, setSkipIdentitySetup] = useState(false);
+  const [identityKmsKeyArn, setIdentityKmsKeyArn] = useState<string | undefined>(undefined);
 
   // Guard against concurrent runs (React StrictMode, re-renders, etc.)
   const isRunningRef = useRef(false);
@@ -488,7 +491,14 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
           configBaseDir,
           region: target.region,
           runtimeCredentials: runtimeCredentials ?? undefined,
+          enableKmsEncryption: true,
         });
+
+        // Log KMS setup
+        if (identityResult.kmsKeyArn) {
+          logger.log(`Token vault encrypted with KMS key: ${identityResult.kmsKeyArn}`);
+          setIdentityKmsKeyArn(identityResult.kmsKeyArn);
+        }
 
         // Log results
         for (const result of identityResult.results) {
@@ -601,6 +611,7 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
     hasTokenExpiredError,
     hasCredentialsError,
     missingCredentials,
+    identityKmsKeyArn,
     startPreflight,
     confirmBootstrap,
     skipBootstrap,
