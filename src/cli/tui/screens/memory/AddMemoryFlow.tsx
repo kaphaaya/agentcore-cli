@@ -16,6 +16,8 @@ interface AddMemoryFlowProps {
   isInteractive?: boolean;
   onExit: () => void;
   onBack: () => void;
+  /** Called when user selects deploy from success screen */
+  onDeploy?: () => void;
 }
 
 const MODE_OPTIONS: SelectableItem[] = [
@@ -28,7 +30,7 @@ const ACCESS_OPTIONS: SelectableItem[] = [
   { id: 'readwrite', title: 'Read/Write', description: 'Agent can read and write to memory' },
 ];
 
-export function AddMemoryFlow({ isInteractive = true, onExit, onBack }: AddMemoryFlowProps) {
+export function AddMemoryFlow({ isInteractive = true, onExit, onBack, onDeploy }: AddMemoryFlowProps) {
   const { createMemory, reset: resetCreate } = useCreateMemory();
   const { names: existingNames } = useExistingMemoryNames();
   const [flow, setFlow] = useState<FlowState>({ name: 'create-wizard' });
@@ -72,6 +74,7 @@ export function AddMemoryFlow({ isInteractive = true, onExit, onBack }: AddMemor
           </Text>
         }
         onAddAnother={onBack}
+        onDeploy={onDeploy}
         onExit={onExit}
       />
     );
