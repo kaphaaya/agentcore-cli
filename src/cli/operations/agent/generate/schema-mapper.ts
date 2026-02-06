@@ -8,7 +8,13 @@ import type {
   MemoryStrategy,
   ModelProvider,
 } from '../../../../schema';
-import type { AgentRenderConfig, IdentityProviderRenderConfig } from '../../../templates/types';
+
+import type {
+  AgentRenderConfig,
+  IdentityProviderRenderConfig,
+  MemoryProviderRenderConfig,
+} from '../../../templates/types';
+
 import {
   DEFAULT_MEMORY_EXPIRY_DAYS,
   DEFAULT_NETWORK_MODE,
@@ -115,21 +121,28 @@ export function mapGenerateConfigToResources(config: GenerateConfig): GenerateCo
 }
 
 /**
- * Maps model provider to identity providers for template rendering.
+ * Compute the default env var name for a memory.
  */
-function mapModelProviderToIdentityProviders(
-  modelProvider: ModelProvider,
+function computeMemoryEnvVarName(memoryName: string): string {
+  return `AGENTCORE_MEMORY_${memoryName.toUpperCase()}`;
+}
+
+/**
+ * Maps memory option to memory providers for template rendering.
+ */
+function mapMemoryOptionToMemoryProviders(
+  memory: MemoryOption,
   projectName: string
-): IdentityProviderRenderConfig[] {
-  if (modelProvider === 'Bedrock') {
+): MemoryProviderRenderConfig[] {
+  if (memory === 'none') {
     return [];
   }
 
-  const credentialName = computeCredentialName(projectName, modelProvider);
+  const memoryName = `${projectName}Memory`;
   return [
     {
-      name: credentialName,
-      envVarName: computeDefaultCredentialEnvVarName(credentialName),
+      name: memoryName,
+      envVarName: computeMemoryEnvVarName(memoryName),
     },
   ];
 }
@@ -149,6 +162,7 @@ export function mapGenerateConfigToRenderConfig(config: GenerateConfig, actualPr
     modelProvider: config.modelProvider,
     hasMemory: config.memory !== 'none',
     hasIdentity: config.modelProvider !== 'Bedrock',
+    memoryProviders: mapMemoryOptionToMemoryProviders(config.memory, config.projectName),
     identityProviders: mapModelProviderToIdentityProviders(config.modelProvider, projectNameForCredentials),
   };
 }

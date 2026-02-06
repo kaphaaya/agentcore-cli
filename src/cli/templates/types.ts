@@ -1,6 +1,13 @@
 import type { ModelProvider, SDKFramework, TargetLanguage } from '../../schema';
 
 /**
+ * Memory provider config for template rendering.
+ */
+export interface MemoryProviderRenderConfig {
+  name: string;
+  envVarName: string;
+}
+/**
  * Identity provider info for template rendering.
  */
 export interface IdentityProviderRenderConfig {
@@ -19,6 +26,7 @@ export interface AgentRenderConfig {
   modelProvider: ModelProvider;
   hasMemory: boolean;
   hasIdentity: boolean;
+  memoryProviders: MemoryProviderRenderConfig[];
   /** Identity providers for template rendering (maps to credentials in schema) */
   identityProviders: IdentityProviderRenderConfig[];
 }
