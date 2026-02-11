@@ -107,13 +107,9 @@ function registerResourceRemove(
 }
 
 export const registerRemove = (program: Command) => {
-  const removeCommand = program
-    .command('remove')
-    .description(COMMAND_DESCRIPTIONS.remove)
-    .action(() => {
-      removeCommand.help();
-    });
+  const removeCommand = program.command('remove').description(COMMAND_DESCRIPTIONS.remove);
 
+  // Register subcommands BEFORE adding argument to parent (preserves type compatibility)
   removeCommand
     .command('all')
     .description('Reset all agentcore schemas to empty state')
@@ -145,7 +141,6 @@ export const registerRemove = (program: Command) => {
   registerResourceRemove(removeCommand, 'agent', 'agent', 'Remove an agent from the project');
   registerResourceRemove(removeCommand, 'memory', 'memory', 'Remove a memory provider from the project');
   registerResourceRemove(removeCommand, 'identity', 'identity', 'Remove an identity provider from the project');
-  registerResourceRemove(removeCommand, 'target', 'target', 'Remove a deployment target from the project');
 
   // MCP Tool disabled - replace with registerResourceRemove() call when enabling
   removeCommand
@@ -170,4 +165,29 @@ export const registerRemove = (program: Command) => {
       console.error('AgentCore Gateway integration is coming soon.');
       process.exit(1);
     });
+
+  // IMPORTANT: Register the catch-all argument LAST. No subcommands should be registered after this point.
+  removeCommand
+    .argument('[subcommand]')
+    .action((subcommand: string | undefined, _options, cmd) => {
+      if (subcommand) {
+        console.error(`error: '${subcommand}' is not a valid subcommand.`);
+        cmd.outputHelp();
+        process.exit(1);
+      }
+
+      requireProject();
+
+      const { clear, unmount } = render(
+        <RemoveFlow
+          isInteractive={false}
+          onExit={() => {
+            clear();
+            unmount();
+          }}
+        />
+      );
+    })
+    .showHelpAfterError()
+    .showSuggestionAfterError();
 };
