@@ -53,4 +53,4 @@ jobs:
           ANTHROPIC_API_KEY: ${{ env.E2E_ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ env.E2E_OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ env.E2E_GEMINI_API_KEY }}
-        run: npm run test:e2e
+        run: npx vitest run --project e2e strands-bedrock strands-openai langgraph-bedrock googleadk-gemini
