@@ -106,3 +106,15 @@ export {
 
 export type { HttpGateway } from './http-gateway';
 export { HttpGatewayNameSchema, HttpGatewaySchema } from './http-gateway';
+
+export type { PaymentManager, PaymentConnector, PaymentProvider, PaymentAuthorizerType } from './payment';
+export {
+  DEFAULT_AUTO_PAYMENT,
+  DEFAULT_SPEND_LIMIT,
+  PaymentManagerSchema,
+  PaymentManagerNameSchema,
+  PaymentConnectorSchema,
+  PaymentConnectorNameSchema,
+  PaymentProviderSchema,
+  PaymentAuthorizerTypeSchema,
+} from './payment';

@@ -1,8 +1,10 @@
 import { ConfigIO, ResourceNotFoundError, ValidationError } from '../../../lib';
 import type { AgentCoreProjectSpec, AwsDeploymentTargets, DeployedState, HarnessModel } from '../../../schema';
 import {
+  DEFAULT_RUNTIME_USER_ID,
   buildAguiRunInput,
   executeBashCommand,
+  getOrCreatePaymentSession,
   invokeA2ARuntime,
   invokeAgentRuntime,
   invokeAgentRuntimeStreaming,
@@ -117,6 +119,82 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     console.log(
       `${ANSI.yellow}Warning: This agent uses VPC network mode. Ensure your VPC endpoints are configured for invocation.${ANSI.reset}`
     );
+  }
+
+  // Payment flags are only supported for HTTP protocol
+  if (
+    (options.paymentInstrumentId || options.paymentSessionId || options.autoSession) &&
+    agentSpec.protocol &&
+    agentSpec.protocol !== 'HTTP'
+  ) {
+    return {
+      success: false,
+      error: new Error(
+        `Payment flags are only supported for HTTP protocol agents. Agent '${agentSpec.name}' uses '${agentSpec.protocol}'.`
+      ),
+    };
+  }
+
+  // Conflict: --auto-session and --payment-session-id are mutually exclusive
+  if (options.autoSession && options.paymentSessionId) {
+    return {
+      success: false,
+      error: new Error('--auto-session and --payment-session-id are mutually exclusive. Use one or the other.'),
+    };
+  }
+
+  // Resolve the payments end-user identity (wallet owner). Prefer the explicit
+  // --payment-user-id; fall back to the runtime --user-id. When neither is set,
+  // leave it undefined so the agent applies its own "default-user" fallback and
+  // we warn below — we never silently scope a real wallet to "default-user".
+  const resolvedPaymentUserId = options.paymentUserId ?? options.userId;
+  options = { ...options, paymentUserId: resolvedPaymentUserId };
+
+  // Footgun guard: a payments-enabled project invoked without an explicit
+  // payments identity will scope the wallet/budget to "default-user" on the
+  // agent side, commingling spend across users. Warn loudly (test-only), never
+  // hard-fail (backward-compatible).
+  const usingPaymentContext =
+    Boolean(options.paymentInstrumentId) || Boolean(options.paymentSessionId) || Boolean(options.autoSession);
+  const projectHasPayments = (project.payments?.length ?? 0) > 0;
+  if ((usingPaymentContext || projectHasPayments) && !resolvedPaymentUserId) {
+    process.stderr.write(
+      `${ANSI.yellow}Warning: no --payment-user-id (or --user-id) provided. Payments will be scoped to ` +
+        `"${DEFAULT_RUNTIME_USER_ID}" on the agent. This is intended for single-user testing only; ` +
+        `production should set --payment-user-id per end user so wallets and budgets are not shared.${ANSI.reset}\n`
+    );
+  }
+
+  // Auto-session: get or create a payment session when --auto-session is set
+  if (options.autoSession && !options.paymentSessionId) {
+    const targetState = deployedState.targets[selectedTargetName];
+    const payments = targetState?.resources?.payments;
+    const firstManager = payments ? Object.values(payments)[0] : undefined;
+    if (!firstManager?.managerArn) {
+      return {
+        success: false,
+        error: new Error('--auto-session requires a deployed payment manager. Run `agentcore deploy` first.'),
+      };
+    }
+    try {
+      const paymentSpec = project.payments?.find(p => p.name === Object.keys(payments!)[0]);
+      const sessionId = await getOrCreatePaymentSession({
+        region: targetConfig.region,
+        // Scope the session to the SAME identity the agent will pay as, so the
+        // session, instrument, and payload user_id all align.
+        userId: resolvedPaymentUserId ?? DEFAULT_RUNTIME_USER_ID,
+        managerArn: firstManager.managerArn,
+        defaultSpendLimit: paymentSpec?.defaultSpendLimit,
+      });
+      options = { ...options, paymentSessionId: sessionId };
+    } catch (err) {
+      return {
+        success: false,
+        error: new Error(
+          `--auto-session failed to create payment session: ${err instanceof Error ? err.message : String(err)}`
+        ),
+      };
+    }
   }
 
   // Exec mode: run shell command in runtime container
@@ -446,6 +524,9 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
         headers: options.headers,
         bearerToken: options.bearerToken,
         baggage,
+        paymentInstrumentId: options.paymentInstrumentId,
+        paymentSessionId: options.paymentSessionId,
+        paymentUserId: options.paymentUserId,
       });
 
       for await (const chunk of result.stream) {
@@ -480,6 +561,9 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     headers: options.headers,
     bearerToken: options.bearerToken,
     baggage,
+    paymentInstrumentId: options.paymentInstrumentId,
+    paymentSessionId: options.paymentSessionId,
+    paymentUserId: options.paymentUserId,
   });
 
   logger.logResponse(response.content);

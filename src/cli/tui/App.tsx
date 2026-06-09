@@ -42,6 +42,10 @@ type Route =
       headers?: Record<string, string>;
       bearerToken?: string;
       isResume?: boolean;
+      paymentInstrumentId?: string;
+      paymentSessionId?: string;
+      paymentUserId?: string;
+      autoSession?: boolean;
     }
   | { name: 'logs' }
   | { name: 'create' }
@@ -239,6 +243,10 @@ function AppContent({
           });
           exit();
         }}
+        initialPaymentInstrumentId={route.paymentInstrumentId}
+        initialPaymentSessionId={route.paymentSessionId}
+        initialPaymentUserId={route.paymentUserId}
+        initialAutoSession={route.autoSession}
       />
     );
   }

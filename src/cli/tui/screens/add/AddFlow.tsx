@@ -16,6 +16,7 @@ import { AddIdentityFlow } from '../identity';
 import { AddGatewayFlow, AddGatewayTargetFlow } from '../mcp';
 import { AddMemoryFlow } from '../memory/AddMemoryFlow';
 import { AddOnlineEvalFlow } from '../online-eval';
+import { AddPaymentFlow } from '../payment';
 import { AddPolicyFlow } from '../policy';
 import { AddRuntimeEndpointFlow } from '../runtime-endpoint';
 import type { AddResourceType } from './AddScreen';
@@ -40,6 +41,8 @@ type FlowState =
   | { name: 'config-bundle-wizard' }
   | { name: 'ab-test-wizard' }
   | { name: 'runtime-endpoint-wizard' }
+  | { name: 'payment-manager-wizard' }
+  | { name: 'payment-connector-wizard' }
   | {
       name: 'agent-create-success';
       agentName: string;
@@ -199,6 +202,10 @@ function getInitialFlowState(resource?: AddResourceType): FlowState {
       return { name: 'config-bundle-wizard' };
     case 'ab-test':
       return { name: 'ab-test-wizard' };
+    case 'payment-manager':
+      return { name: 'payment-manager-wizard' };
+    case 'payment-connector':
+      return { name: 'payment-connector-wizard' };
     default:
       return { name: 'select' };
   }
@@ -260,6 +267,12 @@ export function AddFlow(props: AddFlowProps) {
         break;
       case 'runtime-endpoint':
         setFlow({ name: 'runtime-endpoint-wizard' });
+        break;
+      case 'payment-manager':
+        setFlow({ name: 'payment-manager-wizard' });
+        break;
+      case 'payment-connector':
+        setFlow({ name: 'payment-connector-wizard' });
         break;
     }
   }, []);
@@ -556,6 +569,34 @@ export function AddFlow(props: AddFlowProps) {
     return (
       <AddRuntimeEndpointFlow
         isInteractive={props.isInteractive}
+        onExit={props.onExit}
+        onBack={() => setFlow({ name: 'select' })}
+        onDev={props.onDev}
+        onDeploy={props.onDeploy}
+      />
+    );
+  }
+
+  // Payment manager wizard
+  if (flow.name === 'payment-manager-wizard') {
+    return (
+      <AddPaymentFlow
+        isInteractive={props.isInteractive}
+        initialAction="manager"
+        onExit={props.onExit}
+        onBack={() => setFlow({ name: 'select' })}
+        onDev={props.onDev}
+        onDeploy={props.onDeploy}
+      />
+    );
+  }
+
+  // Payment connector wizard
+  if (flow.name === 'payment-connector-wizard') {
+    return (
+      <AddPaymentFlow
+        isInteractive={props.isInteractive}
+        initialAction="connector"
         onExit={props.onExit}
         onBack={() => setFlow({ name: 'select' })}
         onDev={props.onDev}
