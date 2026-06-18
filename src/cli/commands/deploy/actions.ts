@@ -235,10 +235,10 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
 
     // Unified .env.local existence check across ApiKey, OAuth2, and Payment credentials.
     // Lists every required env var upfront so the user can populate the file in one shot.
-    const envFileError = assertEnvFileExists(context.projectSpec, configIO.getConfigRoot());
-    if (envFileError) {
+    const envFileAssertionResult = assertEnvFileExists(context.projectSpec, configIO.getConfigRoot());
+    if (!envFileAssertionResult.success) {
       logger.finalize(false);
-      return { success: false, error: new Error(envFileError), logPath: logger.getRelativeLogPath() };
+      return { success: false, error: envFileAssertionResult.error, logPath: logger.getRelativeLogPath() };
     }
 
     // Read runtime credentials from process.env (enables non-interactive deploy with -y)
@@ -270,12 +270,16 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         enableKmsEncryption: true,
       });
       if (identityResult.hasErrors) {
-        const errorResult = identityResult.results.find(r => r.status === 'error');
-        const errorMsg =
-          errorResult?.error && typeof errorResult.error === 'string' ? errorResult.error : 'Identity setup failed';
+        const errorResult = identityResult.results.find(r => r.status === 'error' && r.error);
+        const errorMsg = errorResult?.error?.message ?? 'Identity setup failed';
         endStep('error', errorMsg);
         logger.finalize(false);
-        return { success: false, error: new Error(errorMsg), logPath: logger.getRelativeLogPath() };
+
+        return {
+          success: false,
+          error: errorResult?.error ?? new Error('unknown error occurred when setting up api key providers'),
+          logPath: logger.getRelativeLogPath(),
+        };
       }
       identityKmsKeyArn = identityResult.kmsKeyArn;
 
@@ -302,12 +306,17 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       });
       if (oauthResult.hasErrors) {
         // Log detailed error internally, return sanitized message to avoid leaking OAuth details
-        const errorResult = oauthResult.results.find(r => r.status === 'error');
+        const errorResult = oauthResult.results.find(r => r.status === 'error' && r.error);
         logger.log(`OAuth setup error: ${errorResult?.error ?? 'unknown'}`, 'error');
         const errorMsg = 'OAuth credential setup failed. Check the log for details.';
         endStep('error', errorMsg);
         logger.finalize(false);
-        return { success: false, error: new Error(errorMsg), logPath: logger.getRelativeLogPath() };
+
+        return {
+          success: false,
+          error: errorResult?.error ?? new Error(`an unexpected error ocurred when setting up oauth providers`),
+          logPath: logger.getRelativeLogPath(),
+        };
       }
 
       // Collect OAuth credential ARNs for deployed state
@@ -336,13 +345,13 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       });
 
       if (paymentPreDeployResult.hasErrors) {
-        const errorMsgs = paymentPreDeployResult.errors.join('; ');
+        const errorMsgs = paymentPreDeployResult.errors.map(e => e.message).join('; ');
         endStep('error', errorMsgs);
         logger.log(`Payment credential setup errors: ${errorMsgs}`, 'error');
         logger.finalize(false);
         return {
           success: false,
-          error: new Error(`Payment setup failed: ${errorMsgs}`),
+          error: paymentPreDeployResult.errors[0] ?? new Error('payment deploy preflight steps failed'),
           logPath: logger.getRelativeLogPath(),
         };
       }
@@ -405,7 +414,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         logger.finalize(false);
         return {
           success: false,
-          error: new Error('AWS environment needs bootstrapping. Run with --yes to auto-bootstrap.'),
+          error: new ValidationError('AWS environment needs bootstrapping. Run with --yes to auto-bootstrap.'),
           logPath: logger.getRelativeLogPath(),
         };
       }
@@ -517,7 +526,7 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
         logger.finalize(false);
         return {
           success: false,
-          error: new Error(`Stack teardown failed: ${teardownError}`),
+          error: teardown.error,
           logPath: logger.getRelativeLogPath(),
         };
       }
