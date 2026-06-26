@@ -30,6 +30,7 @@ export function registerExport(program: Command): void {
           console.log(JSON.stringify({ success: false, error: '--name or --arn is required in non-interactive mode' }));
           process.exit(1);
         }
+        // renderTUI() guards for an interactive terminal before rendering.
         await renderTUI({ initialRoute: { name: 'export-harness' }, actionOnBack: 'exit' });
         return;
       }
