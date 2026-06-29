@@ -1005,7 +1005,7 @@ agentcore run batch-evaluation \
 # Drive batch evaluation with a dataset
 agentcore run batch-evaluation \
   -r MyAgent \
-  -e Builtin.Completeness \
+  -e Builtin.Correctness \
   --dataset MyDataset --dataset-version DRAFT
 ```
 
