@@ -400,12 +400,16 @@ export const registerRun = (program: Command) => {
         };
 
         await runCliCommand('run.job', !!cliOptions.json, async () => {
+          if (cliOptions.name?.trim() === '') {
+            throw new ValidationError('--name must not be empty. Omit the flag to auto-generate a name.');
+          }
+
           const engine = createJobEngine(new ConfigIO());
 
           const insightIds = cliOptions.insights ?? ['Builtin.Insight.FailureAnalysis'];
           const lookbackDays = cliOptions.lookbackDays ? parseInt(cliOptions.lookbackDays, 10) : undefined;
           if (lookbackDays !== undefined && (isNaN(lookbackDays) || lookbackDays < 1 || lookbackDays > 90)) {
-            throw new Error('--lookback-days must be between 1 and 90');
+            throw new ValidationError('--lookback-days must be a positive integer between 1 and 90.');
           }
 
           const startResult = await engine.start('insights', {
