@@ -12,10 +12,12 @@ function getStepsForSource(source: RunInsightsSource, agentCount: number): RunIn
   return ['source', 'agent', 'insights', 'sessions', 'lookbackDays', 'name', 'confirm'];
 }
 
-function getDefaultConfig(): RunInsightsConfig {
+function getDefaultConfig(soleAgent: string): RunInsightsConfig {
   return {
     source: 'agent',
-    agent: '',
+    // Pre-populate when only one agent exists so the confirm screen shows it
+    // even though the agent selection step is skipped.
+    agent: soleAgent,
     insights: [],
     sessionMode: 'lookback',
     lookbackDays: DEFAULT_LOOKBACK_DAYS,
@@ -25,9 +27,15 @@ function getDefaultConfig(): RunInsightsConfig {
   };
 }
 
-export function useRunInsightsWizard(agentCount: number) {
-  const [config, setConfig] = useState<RunInsightsConfig>(getDefaultConfig);
-  const [step, setStep] = useState<RunInsightsStep>('source');
+export function useRunInsightsWizard(
+  agentNames: string[],
+  initialConfig?: RunInsightsConfig,
+  initialStep: RunInsightsStep = 'source'
+) {
+  const agentCount = agentNames.length;
+  const soleAgent = agentCount === 1 ? (agentNames[0] ?? '') : '';
+  const [config, setConfig] = useState<RunInsightsConfig>(() => initialConfig ?? getDefaultConfig(soleAgent));
+  const [step, setStep] = useState<RunInsightsStep>(initialStep);
 
   const allSteps = useMemo(() => getStepsForSource(config.source, agentCount), [config.source, agentCount]);
   const currentIndex = allSteps.indexOf(step);
@@ -80,13 +88,8 @@ export function useRunInsightsWizard(agentCount: number) {
   const setSessionMode = useCallback(
     (sessionMode: RunInsightsSessionMode) => {
       setConfig(c => ({ ...c, sessionMode }));
-      if (sessionMode === 'lookback') {
-        const next = nextStep('sessions');
-        if (next) setStep(next);
-      } else {
-        const next = nextStep('sessions');
-        if (next) setStep(next);
-      }
+      const next = nextStep('sessions');
+      if (next) setStep(next);
     },
     [nextStep]
   );
@@ -128,9 +131,9 @@ export function useRunInsightsWizard(agentCount: number) {
   );
 
   const reset = useCallback(() => {
-    setConfig(getDefaultConfig());
+    setConfig(getDefaultConfig(soleAgent));
     setStep('source');
-  }, []);
+  }, [soleAgent]);
 
   return {
     config,
