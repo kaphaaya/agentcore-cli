@@ -8,6 +8,7 @@ import {
   PaymentManagerSchema,
 } from '../../schema';
 import type { RemoveResult } from '../commands/remove/types';
+import { ANSI } from '../constants';
 import { getErrorMessage } from '../errors';
 import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { getTemplatePath } from '../templates/templateRoot';
@@ -128,7 +129,7 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
 
   async add(
     options: AddPaymentManagerOptions
-  ): Promise<AddResult<{ managerName: string; skippedRuntimes?: string[] }>> {
+  ): Promise<AddResult<{ managerName: string; skippedRuntimes?: string[]; autoPaymentWarning?: string }>> {
     try {
       const project = await this.readProjectSpec();
       // payments is optional in the schema (absent on projects with no payment
@@ -189,7 +190,20 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
         }
       }
 
-      return { success: true, managerName: options.name, skippedRuntimes };
+      // Auto-payment lets the agent settle 402 responses with no human in the
+      // loop, so surface a warning when it is active. Returned (not printed)
+      // because add() is shared by the CLI and the Ink TUI flow — each caller
+      // renders it through its own channel rather than writing to stderr
+      // mid-render.
+      const effectiveAutoPayment = options.autoPayment ?? DEFAULT_AUTO_PAYMENT;
+      const autoPaymentWarning = effectiveAutoPayment
+        ? `auto-payment is ENABLED for manager "${options.name}". Agents will automatically settle ` +
+          `402 Payment Required responses up to the per-session spend limit ` +
+          `($${options.defaultSpendLimit ?? DEFAULT_SPEND_LIMIT}) with no human approval. ` +
+          `Re-run with --auto-payment false to require manual approval.`
+        : undefined;
+
+      return { success: true, managerName: options.name, skippedRuntimes, autoPaymentWarning };
     } catch (err) {
       return { success: false, error: toError(err) };
     }
@@ -442,9 +456,20 @@ export class PaymentManagerPrimitive extends BasePrimitive<AddPaymentManagerOpti
               });
 
               if (cliOptions.json) {
-                console.log(JSON.stringify(serializeResult(result)));
+                // autoPaymentWarning is a human-facing notice rendered on the
+                // non-JSON path only; strip it so --json stdout stays a clean
+                // machine-readable result (mirrors the connector leak warning).
+                if (result.success) {
+                  const { autoPaymentWarning: _autoPaymentWarning, ...rest } = result;
+                  console.log(JSON.stringify(serializeResult(rest)));
+                } else {
+                  console.log(JSON.stringify(serializeResult(result)));
+                }
               } else if (result.success) {
                 console.log(`Added payment manager '${result.managerName}'`);
+                if (result.autoPaymentWarning) {
+                  console.warn(`${ANSI.yellow}Warning: ${result.autoPaymentWarning}${ANSI.reset}`);
+                }
                 if (result.skippedRuntimes && result.skippedRuntimes.length > 0) {
                   console.warn(
                     `\nWarning: payment capability auto-wiring skipped for non-Strands runtime(s): ${result.skippedRuntimes.join(', ')}.`

@@ -207,6 +207,27 @@ describe('PaymentManagerPrimitive', () => {
         expect(result.error.message).toBe('disk read failure');
       }
     });
+
+    it('returns an auto-payment warning when enabled (default)', async () => {
+      mockReadProjectSpec.mockResolvedValue(makeProject({ runtimes: [] }));
+
+      const result = await primitive.add({ name: 'mgr1', authorizerType: 'AWS_IAM' });
+
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('expected success');
+      expect(result.autoPaymentWarning).toMatch(/auto-payment is enabled/i);
+      expect(result.autoPaymentWarning).toContain('--auto-payment false');
+    });
+
+    it('returns no auto-payment warning when explicitly disabled', async () => {
+      mockReadProjectSpec.mockResolvedValue(makeProject({ runtimes: [] }));
+
+      const result = await primitive.add({ name: 'mgr2', authorizerType: 'AWS_IAM', autoPayment: false });
+
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('expected success');
+      expect(result.autoPaymentWarning).toBeUndefined();
+    });
   });
 
   describe('remove()', () => {
