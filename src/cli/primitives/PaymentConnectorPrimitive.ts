@@ -14,6 +14,7 @@ import {
   validateAuthorizationPrivateKey,
   validateWalletSecret,
 } from './payment-validation';
+import { warnOnLiteralSecretFlag } from './secret-flag-warning';
 import type { AddResult, AddScreenComponent, RemovableResource } from './types';
 import type { Command } from '@commander-js/extra-typings';
 
@@ -434,6 +435,22 @@ export class PaymentConnectorPrimitive extends BasePrimitive<AddPaymentConnector
                 }
                 process.exit(1);
               };
+
+              // Emit the leak warning BEFORE format validation: a literal secret
+              // is already exposed to shell history / the process table the moment
+              // the command is typed, regardless of whether the value is well-formed.
+              // Warning after validation would silently skip the malformed-secret
+              // case — exactly where the leak still happened.
+              warnOnLiteralSecretFlag(
+                [
+                  cliOptions.apiKeySecret,
+                  cliOptions.walletSecret,
+                  cliOptions.appSecret,
+                  cliOptions.authorizationPrivateKey,
+                ],
+                cliOptions.json,
+                'add payment-connector'
+              );
 
               if (provider === 'StripePrivy') {
                 // AWS docs ship the key with a `wallet-auth:` prefix — strip it transparently.
