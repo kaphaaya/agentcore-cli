@@ -1,3 +1,5 @@
+import { formatExportNotes } from '../../../commands/export/types';
+import type { ExportNote } from '../../../commands/export/types';
 import { ErrorPrompt, GradientText, NextSteps, Screen, StepProgress } from '../../components';
 import type { NextStep, Step } from '../../components';
 import { ExportHarnessScreen } from './ExportHarnessScreen';
@@ -10,7 +12,7 @@ type FlowState =
   | { name: 'wizard'; harnessNames: string[]; existingAgentNames: string[]; containerOnlyHarnesses: Set<string> }
   | { name: 'no-harnesses' }
   | { name: 'exporting'; steps: Step[] }
-  | { name: 'success'; agentName: string; notesPath: string }
+  | { name: 'success'; agentName: string; notesPath: string; notes: ExportNote[] }
   | { name: 'error'; message: string };
 
 interface ExportHarnessFlowProps {
@@ -112,7 +114,7 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
         return;
       }
 
-      setFlow({ name: 'success', agentName: result.agentName, notesPath: result.notesPath });
+      setFlow({ name: 'success', agentName: result.agentName, notesPath: result.notesPath, notes: result.notes });
     } catch (err) {
       const { getErrorMessage } = await import('../../../errors');
       setFlow({ name: 'error', message: getErrorMessage(err) });
@@ -178,8 +180,18 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
           <Box flexDirection="column">
             <Text color="green">✓ Exported harness → runtime agent {flow.agentName}</Text>
             <Text dimColor>Generated: app/{flow.agentName}/ · agentcore/agentcore.json updated</Text>
-            <Text dimColor>Review export notes: {flow.notesPath}</Text>
           </Box>
+
+          {/* Surface manual follow-up notes inline so they aren't missed (also in EXPORT_NOTES.md).
+              Shared formatter keeps the wording in sync with the CLI. */}
+          <Box flexDirection="column">
+            {formatExportNotes(flow.notes, flow.notesPath).map((line, i) => (
+              <Text key={i} color={line.tone === 'warn' ? 'yellow' : undefined} dimColor={line.tone === 'dim'}>
+                {line.text}
+              </Text>
+            ))}
+          </Box>
+
           {isInteractive && (
             <NextSteps steps={EXPORT_SUCCESS_STEPS} isInteractive={true} onSelect={handleSelect} onBack={onExit} />
           )}

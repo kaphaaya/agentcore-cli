@@ -2,9 +2,10 @@ import { serializeResult } from '../../../lib/result';
 import { ANSI, COMMAND_DESCRIPTIONS } from '../../constants';
 import { renderTUI } from '../../tui/render';
 import { handleExportHarness } from './harness-action';
+import { formatExportNotes } from './types';
 import type { Command } from '@commander-js/extra-typings';
 
-const { green, red, cyan, dim, reset } = ANSI;
+const { green, red, cyan, dim, yellow, reset } = ANSI;
 
 export function registerExport(program: Command): void {
   const exportCmd = program
@@ -75,8 +76,16 @@ export function registerExport(program: Command): void {
       console.log(`${dim}Generated:${reset}`);
       console.log(`  app/${targetAgentName}/    Python agent (Strands)`);
       console.log(`  agentcore/agentcore.json  updated`);
-      console.log(`  EXPORT_NOTES.md           review for manual follow-up items`);
       console.log('');
+
+      // Surface any manual follow-up notes inline so they aren't missed (also written to
+      // app/<agent>/EXPORT_NOTES.md). Shared formatter keeps CLI + TUI wording in sync.
+      for (const line of formatExportNotes(result.notes, `app/${targetAgentName}/EXPORT_NOTES.md`)) {
+        const color = line.tone === 'warn' ? yellow : dim;
+        console.log(`${color}${line.text}${reset}`);
+      }
+      console.log('');
+
       console.log('Next steps:');
       console.log('');
       console.log(`  ${cyan}agentcore deploy${reset}     ${dim}Deploy the new runtime agent${reset}`);
