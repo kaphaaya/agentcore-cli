@@ -92,7 +92,7 @@ If you created an Strands agent without memory and want to integrate it with you
 
        retrieval_config = {
            f"/users/{actor_id}/facts": RetrievalConfig(top_k=3, relevance_score=0.5),
-           f"/summaries/{actor_id}/{session_id}": RetrievalConfig(top_k=3, relevance_score=0.5)
+           f"/summaries/{actor_id}": RetrievalConfig(top_k=3, relevance_score=0.5)
        }
 
        return AgentCoreMemorySessionManager(
@@ -153,11 +153,11 @@ async def invoke(payload, context):
 The `create` and `add agent` commands accept a `--memory` flag with one of three shorthand values. Each maps to a
 specific memory configuration:
 
-| Shorthand          | Strategies Created                                                                                                                                                                                                                                              |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `none`             | No memory resource created                                                                                                                                                                                                                                      |
-| `shortTerm`        | Memory with no strategies (session context via event expiry only, default 30 days)                                                                                                                                                                              |
-| `longAndShortTerm` | Memory with four strategies: `SEMANTIC` (`/users/{actorId}/facts`), `USER_PREFERENCE` (`/users/{actorId}/preferences`), `SUMMARIZATION` (`/summaries/{actorId}/{sessionId}`), `EPISODIC` (`/episodes/{actorId}/{sessionId}`, reflection: `/episodes/{actorId}`) |
+| Shorthand          | Strategies Created                                                                                                                                                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `none`             | No memory resource created                                                                                                                                                                                                                          |
+| `shortTerm`        | Memory with no strategies (session context via event expiry only, default 30 days)                                                                                                                                                                  |
+| `longAndShortTerm` | Memory with four strategies: `SEMANTIC` (`/users/{actorId}/facts`), `USER_PREFERENCE` (`/users/{actorId}/preferences`), `SUMMARIZATION` (`/summaries/{actorId}`), `EPISODIC` (`/episodes/{actorId}/{sessionId}`, reflection: `/episodes/{actorId}`) |
 
 **Short-term memory** provides basic conversation context within a session — events are stored and expire after the
 configured duration, but no long-term extraction or search is performed.
