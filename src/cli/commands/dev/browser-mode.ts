@@ -105,6 +105,8 @@ export interface BrowserModeOptions {
   workingDir: string;
   project: AgentCoreProjectSpec;
   port: number;
+  /** Whether `port` was set explicitly via -p/--port (the selected runtime then binds it literally) */
+  portExplicit?: boolean;
   agentName?: string;
   harnessName?: string;
   /** OTEL env vars to pass to dev servers (set by the dev command when collector is active) */
@@ -153,7 +155,7 @@ export async function launchBrowserDev(): Promise<void> {
 }
 
 export async function runBrowserMode(opts: BrowserModeOptions): Promise<void> {
-  const { workingDir, project, agentName, harnessName, otelEnvVars = {}, collector } = opts;
+  const { workingDir, project, port, portExplicit, agentName, harnessName, otelEnvVars = {}, collector } = opts;
 
   const configRoot = findConfigRoot(workingDir);
   // Browser mode serves multiple agents; we don't know which agent will be
@@ -237,6 +239,7 @@ export async function runBrowserMode(opts: BrowserModeOptions): Promise<void> {
       harnesses: harnessInfoList,
       selectedAgent: agentName,
       selectedHarness: harnessName,
+      agentBasePort: portExplicit ? port : undefined,
       envVars: mergedEnvVars,
       getEnvVars: async () => {
         const { envVars: freshEnvVars } = await loadDevEnv(workingDir);
