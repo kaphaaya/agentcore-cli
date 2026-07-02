@@ -97,6 +97,7 @@ export function mapByoConfigToAgent(config: AddAgentConfig): AgentEnvSpec {
         networkConfig: {
           subnets: config.subnets,
           securityGroups: config.securityGroups,
+          ...(config.vpcId && { vpcId: config.vpcId }),
         },
       }),
     ...(config.requestHeaderAllowlist?.length && {
@@ -123,8 +124,12 @@ export function mapByoConfigToAgent(config: AddAgentConfig): AgentEnvSpec {
 
 /**
  * Maps AddAgentConfig to GenerateConfig for the create path.
+ *
+ * Shared by the add-agent flow (useAddAgent) and the interactive create wizard
+ * (useCreateFlow) so both threads carry the same fields — notably `vpcId`, which
+ * is required by the schema for Container builds in VPC mode.
  */
-function mapAddAgentConfigToGenerateConfig(config: AddAgentConfig): GenerateConfig {
+export function mapAddAgentConfigToGenerateConfig(config: AddAgentConfig): GenerateConfig {
   return {
     projectName: config.name, // In create context, this is the agent name
     buildType: config.buildType,
@@ -137,6 +142,7 @@ function mapAddAgentConfigToGenerateConfig(config: AddAgentConfig): GenerateConf
     networkMode: config.networkMode,
     subnets: config.subnets,
     securityGroups: config.securityGroups,
+    vpcId: config.vpcId,
     requestHeaderAllowlist: config.requestHeaderAllowlist,
     authorizerType: config.authorizerType,
     jwtConfig: config.jwtConfig,

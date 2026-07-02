@@ -181,6 +181,42 @@ export const NetworkModeSchema = z.enum(['PUBLIC', 'VPC']);
 export type NetworkMode = z.infer<typeof NetworkModeSchema>;
 
 // ============================================================================
+// AWS Network Resource ID Patterns (single source of truth)
+//
+// Canonical AWS resource ID format: lowercase hex, exactly 8 chars (legacy) or
+// 17 chars (current). These are shared by NetworkConfigSchema (agent VPC config)
+// and the auth/PrivateLink schema (ManagedVpcResource). All consumers must import
+// from here rather than defining their own copies.
+// ============================================================================
+
+/** Matches a VPC ID: vpc- followed by 8 or 17 lowercase hex digits. */
+export const VPC_ID_PATTERN = /^vpc-(?:[0-9a-f]{8}|[0-9a-f]{17})$/;
+/** Matches a subnet ID: subnet- followed by 8 or 17 lowercase hex digits. */
+export const SUBNET_ID_PATTERN = /^subnet-(?:[0-9a-f]{8}|[0-9a-f]{17})$/;
+/** Matches a security group ID: sg- followed by 8 or 17 lowercase hex digits. */
+export const SECURITY_GROUP_ID_PATTERN = /^sg-(?:[0-9a-f]{8}|[0-9a-f]{17})$/;
+
+/** CodeBuild caps a project's VPC config at 5 security groups (vs 16 for the runtime). */
+export const MAX_CONTAINER_BUILD_SECURITY_GROUPS = 5;
+
+/**
+ * Whether a build runs the container-image pipeline (CodeBuild) and therefore requires an explicit
+ * `networkConfig.vpcId` in VPC mode — CodeBuild's CreateProject cannot infer the VPC from subnets
+ * alone. This is the single source of truth for "is this a container build?", shared by the schema
+ * refinements (agent-env + harness), the CLI validators, and the import/export vpcId-resolution
+ * guards so the decision cannot drift between them.
+ *
+ * A build is a container build when ANY of these hold:
+ * - `build === 'Container'` (agent specs, and harnesses whose build type resolved to Container),
+ * - it carries a `dockerfile` (from-source container harness), or
+ * - it carries a `containerUri` (prebuilt image harness — export still emits a `FROM <uri>`
+ *   Dockerfile stub that CodeBuild builds, so it needs a vpcId too).
+ */
+export function isContainerBuild(spec: { build?: string; containerUri?: string; dockerfile?: string }): boolean {
+  return spec.build === 'Container' || !!spec.containerUri || !!spec.dockerfile;
+}
+
+// ============================================================================
 // Protocol Mode
 // ============================================================================
 

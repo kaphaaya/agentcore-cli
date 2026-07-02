@@ -1,4 +1,6 @@
+import type { NetworkConfig } from '../../schema';
 import type { EvaluationLevel } from '../../schema/schemas/primitives/evaluator';
+import { resolveVpcIdFromSubnets } from '../commands/shared/vpc-utils';
 import { getCredentialProvider } from './account';
 import { controlPlaneEndpoint } from './stage-endpoint';
 import {
@@ -190,7 +192,7 @@ export interface AgentRuntimeDetail {
   description?: string;
   roleArn: string;
   networkMode: string;
-  networkConfig?: { subnets: string[]; securityGroups: string[] };
+  networkConfig?: NetworkConfig;
   protocol: string;
   runtimeVersion?: string;
   entryPoint?: string[];
@@ -222,17 +224,21 @@ export async function getAgentRuntimeDetail(options: GetAgentRuntimeOptions): Pr
 
   const response = await client.send(command);
 
-  const networkMode = response.networkConfiguration?.networkMode ?? 'PUBLIC';
-  const networkConfig =
-    networkMode === 'VPC' && response.networkConfiguration?.networkModeConfig
-      ? {
-          subnets: response.networkConfiguration.networkModeConfig.subnets ?? [],
-          securityGroups: response.networkConfiguration.networkModeConfig.securityGroups ?? [],
-        }
-      : undefined;
-
   const isContainer = !!response.agentRuntimeArtifact?.containerConfiguration;
   const codeConfig = response.agentRuntimeArtifact?.codeConfiguration;
+
+  const networkMode = response.networkConfiguration?.networkMode ?? 'PUBLIC';
+  let networkConfig: AgentRuntimeDetail['networkConfig'];
+  if (networkMode === 'VPC' && response.networkConfiguration?.networkModeConfig) {
+    const subnets = response.networkConfiguration.networkModeConfig.subnets ?? [];
+    const securityGroups = response.networkConfiguration.networkModeConfig.securityGroups ?? [];
+    // Resolve the VPC ID only for Container builds (the case that requires it — CodeBuild can't infer
+    // the VPC). CodeZip+VPC runtimes don't need it, so this avoids the extra ec2:DescribeSubnets call
+    // (and its IAM) for them. `isContainer` here comes from the runtime's containerConfiguration.
+    const vpcId =
+      isContainer && subnets.length > 0 ? await resolveVpcIdFromSubnets(subnets, options.region) : undefined;
+    networkConfig = { subnets, securityGroups, vpcId };
+  }
 
   let authorizerType: string | undefined;
   let authorizerConfiguration: AgentRuntimeDetail['authorizerConfiguration'];

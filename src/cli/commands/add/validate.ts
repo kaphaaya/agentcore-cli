@@ -310,7 +310,7 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
   }
 
   // Validate VPC options
-  const vpcResult = validateVpcOptions(options);
+  const vpcResult = validateVpcOptions(options, options.build);
   if (!vpcResult.valid) {
     return { valid: false, error: vpcResult.error };
   }
@@ -1131,7 +1131,12 @@ export function validateAddHarnessOptions(options: AddHarnessCliOptions): Valida
 
   // VPC network-mode coupling: reject --subnets/--security-groups when network mode isn't VPC
   // (and require them when it is), instead of silently dropping them. Mirrors the agent path.
-  const vpcResult = validateVpcOptions(options);
+  // Any --container value is a container build — a dockerfile path AND a prebuilt image URI both run
+  // CodeBuild (a URI export emits a `FROM <uri>` Dockerfile stub), so both require --vpc-id in VPC
+  // mode. Gating on a dockerfile-only heuristic let a `--container <ecr-uri>` VPC harness persist
+  // without a vpcId and then dead-end at deploy/export.
+  const harnessBuildType = options.container ? 'Container' : undefined;
+  const vpcResult = validateVpcOptions(options, harnessBuildType);
   if (!vpcResult.valid) {
     return vpcResult;
   }

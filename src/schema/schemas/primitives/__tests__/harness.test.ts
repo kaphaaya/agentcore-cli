@@ -1256,3 +1256,114 @@ describe('HarnessSpecSchema skills field', () => {
     }
   });
 });
+
+describe('HarnessSpecSchema vpcId for container builds', () => {
+  const minimalHarnessForVpc = {
+    name: 'myHarness',
+    model: {
+      provider: 'bedrock' as const,
+      modelId: 'us.anthropic.claude-sonnet-4-5-20250514-v1:0',
+    },
+  };
+  const baseDockerfileHarness = {
+    ...minimalHarnessForVpc,
+    dockerfile: 'Dockerfile',
+    networkMode: 'VPC' as const,
+    networkConfig: { subnets: ['subnet-0123456789abcdef0'], securityGroups: ['sg-0123456789abcdef0'] },
+  };
+
+  it('accepts a dockerfile build in VPC mode WITHOUT vpcId at the schema level (backfilled at deploy)', () => {
+    // vpcId is required to build but not enforced on read/write — old configs must still load. See the
+    // matching note in agent-env.ts; deploy backfills it and the CDK construct fails fast if missing.
+    const r = HarnessSpecSchema.safeParse(baseDockerfileHarness);
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts a dockerfile build in VPC mode when vpcId is present', () => {
+    const r = HarnessSpecSchema.safeParse({
+      ...baseDockerfileHarness,
+      networkConfig: { ...baseDockerfileHarness.networkConfig, vpcId: 'vpc-0123456789abcdef0' },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts a containerUri harness in VPC mode without vpcId (backfilled at deploy, like dockerfile)', () => {
+    // A containerUri harness IS a container build (export emits a `FROM <uri>` Dockerfile that
+    // CodeBuild builds), so it is treated the same as a dockerfile harness — lenient on read, vpcId
+    // backfilled at deploy.
+    const r = HarnessSpecSchema.safeParse({
+      ...minimalHarnessForVpc,
+      containerUri: '123456789012.dkr.ecr.us-east-1.amazonaws.com/repo:tag',
+      networkMode: 'VPC',
+      networkConfig: { subnets: ['subnet-0123456789abcdef0'], securityGroups: ['sg-0123456789abcdef0'] },
+    });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('HarnessSpecSchema — SG≤5 for dockerfile builds in VPC mode', () => {
+  const minimalHarnessForSg = {
+    name: 'myHarness',
+    model: {
+      provider: 'bedrock' as const,
+      modelId: 'us.anthropic.claude-sonnet-4-5-20250514-v1:0',
+    },
+  };
+  const sixSgs = [
+    'sg-00000000000000001',
+    'sg-00000000000000002',
+    'sg-00000000000000003',
+    'sg-00000000000000004',
+    'sg-00000000000000005',
+    'sg-00000000000000006',
+  ];
+  const fiveSgs = sixSgs.slice(0, 5);
+
+  it('rejects dockerfile+VPC with 6 security groups', () => {
+    const r = HarnessSpecSchema.safeParse({
+      ...minimalHarnessForSg,
+      dockerfile: 'Dockerfile',
+      networkMode: 'VPC' as const,
+      networkConfig: {
+        subnets: ['subnet-0123456789abcdef0'],
+        securityGroups: sixSgs,
+        vpcId: 'vpc-0123456789abcdef0',
+      },
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some(i => i.message.includes('5 security groups'))).toBe(true);
+    }
+  });
+
+  it('accepts dockerfile+VPC with exactly 5 security groups', () => {
+    const r = HarnessSpecSchema.safeParse({
+      ...minimalHarnessForSg,
+      dockerfile: 'Dockerfile',
+      networkMode: 'VPC' as const,
+      networkConfig: {
+        subnets: ['subnet-0123456789abcdef0'],
+        securityGroups: fiveSgs,
+        vpcId: 'vpc-0123456789abcdef0',
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects containerUri+VPC with 6 security groups (a containerUri harness is a container build, so the cap applies)', () => {
+    const r = HarnessSpecSchema.safeParse({
+      ...minimalHarnessForSg,
+      containerUri: '123456789012.dkr.ecr.us-east-1.amazonaws.com/repo:tag',
+      networkMode: 'VPC',
+      networkConfig: {
+        subnets: ['subnet-0123456789abcdef0'],
+        securityGroups: sixSgs,
+        vpcId: 'vpc-0123456789abcdef0',
+      },
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some(i => i.message.includes('5 security groups'))).toBe(true);
+    }
+  });
+});

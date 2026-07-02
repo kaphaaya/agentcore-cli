@@ -4,9 +4,14 @@
  * @module agent-env
  */
 import {
+  MAX_CONTAINER_BUILD_SECURITY_GROUPS,
   NetworkModeSchema,
   ProtocolModeSchema,
   RuntimeVersionSchema as RuntimeVersionSchemaFromConstants,
+  SECURITY_GROUP_ID_PATTERN,
+  SUBNET_ID_PATTERN,
+  VPC_ID_PATTERN,
+  isContainerBuild,
 } from '../constants';
 import type { DirectoryPath, FilePath } from '../types';
 import { AuthorizerConfigSchema, RuntimeAuthorizerTypeSchema } from './auth';
@@ -113,14 +118,16 @@ export type Instrumentation = z.infer<typeof InstrumentationSchema>;
  * Required when networkMode is 'VPC'.
  */
 export const NetworkConfigSchema = z.object({
-  subnets: z
-    .array(z.string().regex(/^subnet-[0-9a-zA-Z]{8,17}$/))
-    .min(1)
-    .max(16),
+  subnets: z.array(z.string().regex(SUBNET_ID_PATTERN, 'Must be a subnet id (subnet-...)')).min(1).max(16),
   securityGroups: z
-    .array(z.string().regex(/^sg-[0-9a-zA-Z]{8,17}$/))
+    .array(z.string().regex(SECURITY_GROUP_ID_PATTERN, 'Must be a security group id (sg-...)'))
     .min(1)
     .max(16),
+  /**
+   * VPC ID. Required for Container builds in VPC mode because CodeBuild needs an explicit VPC ID;
+   * it cannot infer the VPC from subnets alone. Runtime/Lambda builds can omit this.
+   */
+  vpcId: z.string().regex(VPC_ID_PATTERN, 'Must be a VPC id (vpc-...)').optional(),
 });
 export type NetworkConfig = z.infer<typeof NetworkConfigSchema>;
 
@@ -369,6 +376,24 @@ export const AgentEnvSpecSchema = z
         code: z.ZodIssueCode.custom,
         message: 'networkConfig is only allowed when networkMode is VPC',
         path: ['networkConfig'],
+      });
+    }
+    // NOTE: vpcId is NOT required here at the schema (read/write) level. A Container+VPC agent needs
+    // a vpcId to build (CodeBuild can't infer it), but enforcing that on read would hard-fail
+    // pre-existing agentcore.json files written before vpcId existed. Instead: the CLI input
+    // validators require --vpc-id for fresh Container+VPC creates, deploy backfills a missing vpcId
+    // from the subnets (ec2:DescribeSubnets) and persists it, and the CDK construct fails fast if it
+    // is still missing at synth. This keeps `status`/`remove`/`validate` working on old configs.
+    if (
+      data.networkMode === 'VPC' &&
+      isContainerBuild(data) &&
+      data.networkConfig &&
+      data.networkConfig.securityGroups.length > MAX_CONTAINER_BUILD_SECURITY_GROUPS
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Container builds in VPC mode allow at most ${MAX_CONTAINER_BUILD_SECURITY_GROUPS} security groups (CodeBuild limit)`,
+        path: ['networkConfig', 'securityGroups'],
       });
     }
     if (data.authorizerType === 'CUSTOM_JWT' && !data.authorizerConfiguration?.customJwtAuthorizer) {

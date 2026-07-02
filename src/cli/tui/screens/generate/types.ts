@@ -31,6 +31,7 @@ export type GenerateStep =
   | 'networkMode'
   | 'subnets'
   | 'securityGroups'
+  | 'vpcId'
   | 'requestHeaderAllowlist'
   | 'authorizerType'
   | 'jwtConfig'
@@ -65,6 +66,7 @@ export interface GenerateConfig {
   networkMode?: NetworkMode;
   subnets?: string[];
   securityGroups?: string[];
+  vpcId?: string;
   /** Allowed request headers for the runtime */
   requestHeaderAllowlist?: string[];
   /** Authorizer type for inbound requests */
@@ -112,6 +114,7 @@ export const STEP_LABELS: Record<GenerateStep, string> = {
   networkMode: 'Network',
   subnets: 'Subnets',
   securityGroups: 'Security Groups',
+  vpcId: 'VPC ID',
   requestHeaderAllowlist: 'Headers',
   authorizerType: 'Auth',
   jwtConfig: 'JWT Config',

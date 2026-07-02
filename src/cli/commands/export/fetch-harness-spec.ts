@@ -1,5 +1,6 @@
 import { ValidationError } from '../../../lib/errors/types';
 import type { HarnessSpec } from '../../../schema';
+import { isContainerBuild } from '../../../schema/constants';
 import type {
   HarnessSkill as ApiHarnessSkill,
   HarnessTool as ApiHarnessTool,
@@ -8,6 +9,7 @@ import type {
   HarnessModelConfiguration,
 } from '../../aws/agentcore-harness';
 import { getHarness } from '../../aws/agentcore-harness';
+import { resolveVpcIdFromSubnets } from '../shared/vpc-utils';
 
 /**
  * Fetch a harness by ARN from the control plane and map it to a local HarnessSpec — the same
@@ -21,7 +23,15 @@ export async function fetchHarnessSpecByArn(
 ): Promise<{ spec: HarnessSpec; systemPrompt?: string }> {
   const harnessId = harnessIdFromArn(arn);
   const { harness } = await getHarness({ region, harnessId });
-  return mapApiHarnessToSpec(harness);
+  const result = mapApiHarnessToSpec(harness);
+  // Resolve vpcId for a container build in VPC mode (the case that requires it — CodeBuild can't infer
+  // the VPC). A prebuilt-containerUri harness still exports a `FROM <uri>` Dockerfile stub that
+  // CodeBuild builds, so isContainerBuild covers it too; only a CodeZip harness skips resolution.
+  const nc = result.spec.networkConfig;
+  if (isContainerBuild(result.spec) && result.spec.networkMode === 'VPC' && nc && nc.subnets.length > 0 && !nc.vpcId) {
+    nc.vpcId = await resolveVpcIdFromSubnets(nc.subnets, region);
+  }
+  return result;
 }
 
 /** Extract the harness id from a harness ARN (`.../harness/<id>` -> `<id>`). */

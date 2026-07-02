@@ -1,4 +1,4 @@
-import { NetworkModeSchema } from '../../constants';
+import { MAX_CONTAINER_BUILD_SECURITY_GROUPS, NetworkModeSchema, isContainerBuild } from '../../constants';
 import {
   EfsAccessPointConfigSchema,
   LifecycleConfigurationSchema,
@@ -631,6 +631,24 @@ export const HarnessSpecSchema = z
         code: z.ZodIssueCode.custom,
         message: 'networkConfig is only allowed when networkMode is VPC',
         path: ['networkConfig'],
+      });
+    }
+    // vpcId is NOT required here at the schema level (see the matching note in agent-env.ts): a
+    // container harness build in VPC mode needs one, but requiring it on read would hard-fail
+    // pre-existing configs. The CLI validators enforce it for fresh creates, deploy backfills +
+    // persists a missing vpcId, and the CDK construct fails fast at synth. The SG cap stays here — it
+    // is a hard CodeBuild limit that backfill can't satisfy. Gating on the shared isContainerBuild
+    // predicate keeps this in sync (a dockerfile-only gate previously missed containerUri harnesses).
+    if (
+      data.networkMode === 'VPC' &&
+      isContainerBuild(data) &&
+      data.networkConfig &&
+      data.networkConfig.securityGroups.length > MAX_CONTAINER_BUILD_SECURITY_GROUPS
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Container builds in VPC mode allow at most ${MAX_CONTAINER_BUILD_SECURITY_GROUPS} security groups (CodeBuild limit)`,
+        path: ['networkConfig', 'securityGroups'],
       });
     }
     if ((data.efsAccessPoints?.length || data.s3AccessPoints?.length) && data.networkMode !== 'VPC') {
