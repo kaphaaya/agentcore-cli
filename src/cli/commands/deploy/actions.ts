@@ -160,6 +160,10 @@ export async function runDeploy(toolkitWrapper: CdkToolkitWrapper, stackName: st
 export async function handleDeploy(options: ValidatedDeployOptions): Promise<DeployResult> {
   let toolkitWrapper = null;
   let restoreEnv: (() => void) | null = null;
+  // In preview modes (--dry-run / --diff) the vpcId backfill writes to agentcore.json/harness.json so
+  // the synth subprocess can read it; this reverts those writes on EVERY exit path (success, early
+  // return, or throw) so a preview never leaves the working tree dirty. No-op on a real deploy.
+  let previewRestore: (() => Promise<void>) | null = null;
   const logger = new ExecLogger({ command: 'deploy' });
   const { onProgress } = options;
   let currentStepName = '';
@@ -411,10 +415,15 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     }
 
     // Backfill vpcId for pre-existing Container+VPC configs written before vpcId was required. This
-    // resolves the VPC from the subnets (ec2:DescribeSubnets) and persists it to disk so the CDK
-    // synth process — which re-reads agentcore.json / harness.json — has the value it needs. Fresh
-    // creates already carry a vpcId, so this is a no-op for them.
-    const backfill = await backfillContainerVpcIds(configIO, context.projectSpec, target.region);
+    // resolves the VPC from the subnets (ec2:DescribeSubnets) and writes it to disk so the CDK synth
+    // process — which re-reads agentcore.json / harness.json — has the value it needs. Fresh creates
+    // already carry a vpcId, so this is a no-op for them. In preview modes (--dry-run / --diff) the
+    // write is reverted after synth via backfill.restore() so a preview leaves the working tree clean.
+    const isPreview = !!options.plan || !!options.diff;
+    const backfill = await backfillContainerVpcIds(configIO, context.projectSpec, target.region, !isPreview);
+    // In preview mode, revert the on-disk backfill in `finally` so every exit path (including a synth
+    // throw or an early return) leaves the working tree clean. restore() is a no-op on a real deploy.
+    if (isPreview) previewRestore = backfill.restore;
     if (backfill.backfilled.length > 0) {
       logger.log(`Resolved networkConfig.vpcId for Container+VPC build(s): ${backfill.backfilled.join(', ')}`, 'info');
     }
@@ -477,7 +486,8 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     }
     endStep('success');
 
-    // Plan mode: stop after synth and checks, don't deploy
+    // Plan mode: stop after synth and checks, don't deploy. The backfilled vpcId written to disk for
+    // synth is reverted in the `finally` (covers this and every other preview exit path).
     if (options.plan) {
       logger.finalize(true);
       await toolkitWrapper.dispose();
@@ -490,7 +500,8 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
       };
     }
 
-    // Diff mode: run cdk diff and exit without deploying
+    // Diff mode: run cdk diff and exit without deploying. Like plan mode, the backfilled vpcId is
+    // reverted in the `finally`, so even a throw in runDiff leaves the working tree clean.
     if (options.diff) {
       startStep('Run CDK diff');
       await runDiff(toolkitWrapper, stackName, switchableIoHost);
@@ -978,8 +989,23 @@ export async function handleDeploy(options: ValidatedDeployOptions): Promise<Dep
     logger.finalize(false);
     return { success: false, error: toError(err), logPath: logger.getRelativeLogPath() };
   } finally {
+    // Each cleanup step must run regardless of whether an earlier one fails — a throw from
+    // dispose() (common after a synth/bootstrap failure on a creds-less preview) must not skip the
+    // vpcId-backfill revert or the env restore. Isolate each with try/catch.
     if (toolkitWrapper) {
-      await toolkitWrapper.dispose();
+      try {
+        await toolkitWrapper.dispose();
+      } catch (disposeErr) {
+        logger.log(`CDK toolkit dispose failed: ${getErrorMessage(disposeErr)}`, 'warn');
+      }
+    }
+    // Revert the preview-mode vpcId backfill on every exit path (success, early return, or throw).
+    if (previewRestore) {
+      try {
+        await previewRestore();
+      } catch (restoreErr) {
+        logger.log(`Failed to revert preview vpcId backfill: ${getErrorMessage(restoreErr)}`, 'warn');
+      }
     }
     restoreEnv?.();
   }
