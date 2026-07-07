@@ -175,10 +175,7 @@ export function AddKnowledgeBaseScreen({
       setPendingType(item.id as DataSourceTypeFlag);
       setStep('sources');
     },
-    // Esc from the type picker: if we already have at least one captured
-    // source, the only sensible return is the add-another decision (we can't
-    // un-capture earlier sources). Otherwise go back to description.
-    onExit: () => setStep(dataSources.length === 0 ? 'description' : 'add-another'),
+    onExit: () => setStep('description'),
   });
 
   // Surface the "Remove a captured source" option only when there's something
@@ -314,7 +311,7 @@ export function AddKnowledgeBaseScreen({
             prompt="Description (optional, press Enter to skip)"
             onSubmit={(value: string) => {
               setDescription(value);
-              setStep('data-source-type');
+              setStep(dataSources.length > 0 ? 'add-another' : 'data-source-type');
             }}
             onCancel={() => setStep('name')}
             allowEmpty
@@ -346,7 +343,7 @@ export function AddKnowledgeBaseScreen({
               setDataSources([...dataSources, { dataSourceType: pendingType, value }]);
               setStep('add-another');
             }}
-            onCancel={() => setStep(dataSources.length === 0 ? 'data-source-type' : 'add-another')}
+            onCancel={() => setStep('data-source-type')}
             schema={S3UriSchema}
           />
         )}
@@ -375,7 +372,7 @@ export function AddKnowledgeBaseScreen({
               ]);
               setStep('add-another');
             }}
-            onCancel={() => setStep(dataSources.length === 0 ? 'data-source-type' : 'add-another')}
+            onCancel={() => setStep('data-source-type')}
             schema={makeConnectorConfigSchema(pendingType)}
           />
         )}
