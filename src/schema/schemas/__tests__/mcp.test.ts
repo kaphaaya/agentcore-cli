@@ -33,7 +33,6 @@ describe('GatewayTargetTypeSchema', () => {
       'httpRuntime',
       'connector',
       'passthrough',
-      'webSearch',
     ]);
   });
 
@@ -1213,150 +1212,38 @@ describe('AgentCoreGatewayTargetSchema with httpRuntime', () => {
   });
 });
 
-describe('AgentCoreGatewayTargetSchema with webSearch', () => {
-  it('accepts a minimal webSearch target', () => {
+describe('AgentCoreGatewayTargetSchema with web-search connector', () => {
+  it('accepts a minimal web-search connector target', () => {
     const result = AgentCoreGatewayTargetSchema.safeParse({
       name: 'web-search',
-      targetType: 'webSearch',
+      targetType: 'connector',
+      connectorId: 'web-search',
     });
     expect(result.success).toBe(true);
   });
 
-  it('accepts a webSearch target with excludeDomains', () => {
+  it('accepts a web-search connector target with configurations', () => {
     const result = AgentCoreGatewayTargetSchema.safeParse({
       name: 'web-search',
-      targetType: 'webSearch',
-      excludeDomains: ['internal.example.com', 'staging.example.com'],
+      targetType: 'connector',
+      connectorId: 'web-search',
+      configurations: [
+        {
+          name: 'WebSearch',
+          parameterValues: { domainFilter: { exclude: ['internal.example.com', 'staging.example.com'] } },
+        },
+      ],
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects an empty excludeDomains array', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      excludeDomains: [],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects a webSearch target with compute', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      compute: {
-        host: 'Lambda',
-        implementation: { language: 'Python', path: 'tools', handler: 'h' },
-        pythonVersion: 'PYTHON_3_12',
-      },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.message.includes('compute'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with endpoint', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      endpoint: 'https://example.com/mcp',
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.message.includes('endpoint'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with apiGateway config', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      apiGateway: {
-        restApiId: 'abc123',
-        stage: 'prod',
-        apiGatewayToolConfiguration: { toolFilters: [{ filterPath: '/*', methods: ['GET'] }] },
-      },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.message.includes('apiGateway'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with lambdaFunctionArn config', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      lambdaFunctionArn: {
-        lambdaArn: 'arn:aws:lambda:us-east-1:123456789012:function:my-func',
-        toolSchemaFile: './tools.json',
-      },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.message.includes('lambdaFunctionArn'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with schemaSource', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      schemaSource: { inline: { path: './schema.json' } },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.message.includes('schemaSource'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with connectorId', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      connectorId: 'bedrock-knowledge-bases',
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.path.includes('connectorId'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with httpRuntime', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      httpRuntime: { runtime: 'my-agent' },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.path.includes('httpRuntime'))).toBe(true);
-    }
-  });
-
-  it('rejects a webSearch target with outboundAuth', () => {
-    const result = AgentCoreGatewayTargetSchema.safeParse({
-      name: 'web-search',
-      targetType: 'webSearch',
-      outboundAuth: { type: 'OAUTH', credentialName: 'my-cred' },
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.path.includes('outboundAuth'))).toBe(true);
-    }
-  });
-
-  it('rejects excludeDomains on a non-webSearch target', () => {
+  it('accepts parameterValues on non-connector types without validation', () => {
     const result = AgentCoreGatewayTargetSchema.safeParse({
       name: 'mcp',
       targetType: 'mcpServer',
       endpoint: 'https://example.com/mcp',
-      excludeDomains: ['internal.example.com'],
+      parameterValues: { anything: true },
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some(i => i.path.includes('excludeDomains'))).toBe(true);
-    }
   });
 });

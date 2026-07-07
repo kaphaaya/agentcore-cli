@@ -140,23 +140,6 @@ describe('add knowledge-base — non-S3 connectors', () => {
     expect(existsSync(join(projectRoot, 'app'))).toBe(false);
   });
 
-  it('does not copy any file when the gateway is missing', async () => {
-    const { primitive, projectRoot } = makePrimitiveWithProjectDir(emptyProject());
-    tmpDirs.push(projectRoot);
-    const cfg = writeConfig(projectRoot, 'web.json', {
-      type: 'WEB',
-      connectionConfiguration: { authType: 'NO_AUTH' },
-    });
-    const r = await primitive.add({
-      name: 'kb',
-      dataSourceType: 'web-crawler',
-      connectorConfig: [cfg],
-      gateway: 'missing-gw',
-    });
-    expect(r.success).toBe(false);
-    expect(existsSync(join(projectRoot, 'app'))).toBe(false);
-  });
-
   it('rejects two connector configs with the same basename and copies nothing', async () => {
     const { primitive, getProject, projectRoot } = makePrimitiveWithProjectDir(emptyProject());
     tmpDirs.push(projectRoot);
@@ -325,97 +308,6 @@ describe('KnowledgeBasePrimitive — add (new KB)', () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.error.message).toMatch(/Invalid S3 URI/i);
-  });
-
-  it('errors when --gateway references a gateway not in agentCoreGateways[]', async () => {
-    const { primitive } = makePrimitive(emptyProject());
-    const result = await primitive.add({
-      name: 'docs',
-      source: ['s3://my-bucket/a/'],
-      gateway: 'missing-gw',
-    });
-    expect(result.success).toBe(false);
-    if (result.success) return;
-    expect(result.error.message).toMatch(/Gateway "missing-gw" not found/i);
-  });
-
-  it('with --gateway: emits a Retrieve target AND a gateway-scoped agentic-retrieve target', async () => {
-    const initial = emptyProject();
-    initial.agentCoreGateways.push({
-      name: 'main-gw',
-      targets: [],
-      authorizerType: 'NONE',
-      enableSemanticSearch: true,
-      exceptionLevel: 'NONE',
-    } as unknown as AgentCoreProjectSpec['agentCoreGateways'][0]);
-    const { primitive, getProject } = makePrimitive(initial);
-
-    const result = await primitive.add({
-      name: 'docs',
-      source: ['s3://my-bucket/a/'],
-      gateway: 'main-gw',
-    });
-
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.gatewayWired).toBe('main-gw');
-
-    const project = getProject();
-    expect(project.knowledgeBases[0]?.gateway).toBe('main-gw');
-    const targets = project.agentCoreGateways[0]?.targets ?? [];
-    expect(targets).toHaveLength(2);
-
-    const retrieve = targets.find(t => t.name === 'docs');
-    expect(retrieve?.targetType).toBe('connector');
-    expect(retrieve?.connectorId).toBe('bedrock-knowledge-bases');
-    // The connector target stores the KB *name*; the L3 looks it up at synth.
-    expect(retrieve?.knowledgeBaseId).toBe('docs');
-
-    const agentic = targets.find(t => t.connectorId === 'bedrock-agentic-retrieve');
-    expect(agentic?.name).toBe('main-gw-agentic');
-    expect(agentic?.knowledgeBaseIds).toEqual(['docs']);
-  });
-
-  it('second KB on the same gateway appends to the existing agentic-retrieve target', async () => {
-    const initial = emptyProject();
-    initial.agentCoreGateways.push({
-      name: 'main-gw',
-      targets: [],
-      authorizerType: 'NONE',
-      enableSemanticSearch: true,
-      exceptionLevel: 'NONE',
-    } as unknown as AgentCoreProjectSpec['agentCoreGateways'][0]);
-    const { primitive, getProject } = makePrimitive(initial);
-
-    await primitive.add({ name: 'docs', source: ['s3://my-bucket/a/'], gateway: 'main-gw' });
-    await primitive.add({ name: 'hr', source: ['s3://my-bucket/b/'], gateway: 'main-gw' });
-
-    const targets = getProject().agentCoreGateways[0]?.targets ?? [];
-    // Two Retrieve targets + one agentic target.
-    expect(targets).toHaveLength(3);
-    expect(targets.filter(t => t.connectorId === 'bedrock-knowledge-bases').map(t => t.name)).toEqual(['docs', 'hr']);
-    const agentic = targets.find(t => t.connectorId === 'bedrock-agentic-retrieve');
-    expect(agentic?.name).toBe('main-gw-agentic');
-    expect(agentic?.knowledgeBaseIds).toEqual(['docs', 'hr']);
-  });
-
-  it('idempotent re-add: same KB twice does not duplicate it in the agentic-retrieve target', async () => {
-    const initial = emptyProject();
-    initial.agentCoreGateways.push({
-      name: 'main-gw',
-      targets: [],
-      authorizerType: 'NONE',
-      enableSemanticSearch: true,
-      exceptionLevel: 'NONE',
-    } as unknown as AgentCoreProjectSpec['agentCoreGateways'][0]);
-    const { primitive, getProject } = makePrimitive(initial);
-
-    await primitive.add({ name: 'docs', source: ['s3://my-bucket/a/'], gateway: 'main-gw' });
-    // Append a new data source on the same KB; --gateway is the same.
-    await primitive.add({ name: 'docs', source: ['s3://my-bucket/c/'], gateway: 'main-gw' });
-
-    const agentic = getProject().agentCoreGateways[0]?.targets.find(t => t.connectorId === 'bedrock-agentic-retrieve');
-    expect(agentic?.knowledgeBaseIds).toEqual(['docs']);
   });
 
   it('rejects duplicate --source URIs within the same invocation', async () => {
@@ -610,13 +502,31 @@ describe('KnowledgeBasePrimitive — remove', () => {
     initial.agentCoreGateways.push({
       name: 'main-gw',
       targets: [
-        { name: 'docs', targetType: 'connector', connectorId: 'bedrock-knowledge-bases', knowledgeBaseId: 'docs' },
-        { name: 'hr', targetType: 'connector', connectorId: 'bedrock-knowledge-bases', knowledgeBaseId: 'hr' },
         {
-          name: 'main-gw-agentic',
+          name: 'docs',
           targetType: 'connector',
-          connectorId: 'bedrock-agentic-retrieve',
-          knowledgeBaseIds: ['docs', 'hr'],
+          connectorId: 'bedrock-knowledge-bases',
+          configurations: [
+            { name: 'Retrieve', parameterValues: { knowledgeBaseId: 'docs' }, parameterOverrides: [] },
+            {
+              name: 'AgenticRetrieveStream',
+              parameterValues: { retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'docs' } } }] },
+              parameterOverrides: [],
+            },
+          ],
+        },
+        {
+          name: 'hr',
+          targetType: 'connector',
+          connectorId: 'bedrock-knowledge-bases',
+          configurations: [
+            { name: 'Retrieve', parameterValues: { knowledgeBaseId: 'hr' }, parameterOverrides: [] },
+            {
+              name: 'AgenticRetrieveStream',
+              parameterValues: { retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'hr' } } }] },
+              parameterOverrides: [],
+            },
+          ],
         },
       ],
       authorizerType: 'NONE',
@@ -629,14 +539,16 @@ describe('KnowledgeBasePrimitive — remove', () => {
     expect(result.success).toBe(true);
 
     const targets = getProject().agentCoreGateways[0]?.targets ?? [];
-    // Per-KB Retrieve target gone; agentic target stays with hr only.
+    // Per-KB target gone; hr target remains.
     expect(targets.find(t => t.name === 'docs')).toBeUndefined();
-    const agentic = targets.find(t => t.connectorId === 'bedrock-agentic-retrieve');
-    expect(agentic).toBeDefined();
-    expect(agentic?.knowledgeBaseIds).toEqual(['hr']);
+    const hr = targets.find(t => t.name === 'hr');
+    expect(hr).toBeDefined();
+    const agenticCfg = (hr?.configurations ?? []).find(c => c.name === 'AgenticRetrieveStream');
+    const retrievers = (agenticCfg?.parameterValues as any)?.retrievers as any[];
+    expect(retrievers?.map((r: any) => r.configuration.knowledgeBase.knowledgeBaseId)).toEqual(['hr']);
   });
 
-  it('removes the agentic-retrieve target entirely when the removed KB was its only entry', async () => {
+  it('removes the connector target entirely when the removed KB was the only one', async () => {
     const initial = emptyProject();
     initial.knowledgeBases = [
       {
@@ -649,12 +561,18 @@ describe('KnowledgeBasePrimitive — remove', () => {
     initial.agentCoreGateways.push({
       name: 'main-gw',
       targets: [
-        { name: 'docs', targetType: 'connector', connectorId: 'bedrock-knowledge-bases', knowledgeBaseId: 'docs' },
         {
-          name: 'main-gw-agentic',
+          name: 'docs',
           targetType: 'connector',
-          connectorId: 'bedrock-agentic-retrieve',
-          knowledgeBaseIds: ['docs'],
+          connectorId: 'bedrock-knowledge-bases',
+          configurations: [
+            { name: 'Retrieve', parameterValues: { knowledgeBaseId: 'docs' }, parameterOverrides: [] },
+            {
+              name: 'AgenticRetrieveStream',
+              parameterValues: { retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'docs' } } }] },
+              parameterOverrides: [],
+            },
+          ],
         },
       ],
       authorizerType: 'NONE',
@@ -670,7 +588,7 @@ describe('KnowledgeBasePrimitive — remove', () => {
     expect(targets).toHaveLength(0);
   });
 
-  it('previewRemove summarizes the agentic-retrieve prune', async () => {
+  it('previewRemove summarizes removal of the KB target', async () => {
     const initial = emptyProject();
     initial.knowledgeBases = [
       {
@@ -689,13 +607,31 @@ describe('KnowledgeBasePrimitive — remove', () => {
     initial.agentCoreGateways.push({
       name: 'main-gw',
       targets: [
-        { name: 'docs', targetType: 'connector', connectorId: 'bedrock-knowledge-bases', knowledgeBaseId: 'docs' },
-        { name: 'hr', targetType: 'connector', connectorId: 'bedrock-knowledge-bases', knowledgeBaseId: 'hr' },
         {
-          name: 'main-gw-agentic',
+          name: 'docs',
           targetType: 'connector',
-          connectorId: 'bedrock-agentic-retrieve',
-          knowledgeBaseIds: ['docs', 'hr'],
+          connectorId: 'bedrock-knowledge-bases',
+          configurations: [
+            { name: 'Retrieve', parameterValues: { knowledgeBaseId: 'docs' }, parameterOverrides: [] },
+            {
+              name: 'AgenticRetrieveStream',
+              parameterValues: { retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'docs' } } }] },
+              parameterOverrides: [],
+            },
+          ],
+        },
+        {
+          name: 'hr',
+          targetType: 'connector',
+          connectorId: 'bedrock-knowledge-bases',
+          configurations: [
+            { name: 'Retrieve', parameterValues: { knowledgeBaseId: 'hr' }, parameterOverrides: [] },
+            {
+              name: 'AgenticRetrieveStream',
+              parameterValues: { retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'hr' } } }] },
+              parameterOverrides: [],
+            },
+          ],
         },
       ],
       authorizerType: 'NONE',
@@ -706,10 +642,10 @@ describe('KnowledgeBasePrimitive — remove', () => {
 
     const preview = await primitive.previewRemove('docs');
     const lines = preview.summary.join('\n');
-    expect(lines).toMatch(/main-gw.*agentic-retrieve target 'main-gw-agentic' will lose KB 'docs'/);
+    expect(lines).toMatch(/Gateway target: 'docs' on 'main-gw' will be removed/);
   });
 
-  it('previewRemove notes when the agentic-retrieve target itself will be removed', async () => {
+  it('previewRemove notes when the last KB target will be removed', async () => {
     const initial = emptyProject();
     initial.knowledgeBases = [
       {
@@ -722,12 +658,18 @@ describe('KnowledgeBasePrimitive — remove', () => {
     initial.agentCoreGateways.push({
       name: 'main-gw',
       targets: [
-        { name: 'docs', targetType: 'connector', connectorId: 'bedrock-knowledge-bases', knowledgeBaseId: 'docs' },
         {
-          name: 'main-gw-agentic',
+          name: 'docs',
           targetType: 'connector',
-          connectorId: 'bedrock-agentic-retrieve',
-          knowledgeBaseIds: ['docs'],
+          connectorId: 'bedrock-knowledge-bases',
+          configurations: [
+            { name: 'Retrieve', parameterValues: { knowledgeBaseId: 'docs' }, parameterOverrides: [] },
+            {
+              name: 'AgenticRetrieveStream',
+              parameterValues: { retrievers: [{ configuration: { knowledgeBase: { knowledgeBaseId: 'docs' } } }] },
+              parameterOverrides: [],
+            },
+          ],
         },
       ],
       authorizerType: 'NONE',
@@ -738,6 +680,6 @@ describe('KnowledgeBasePrimitive — remove', () => {
 
     const preview = await primitive.previewRemove('docs');
     const lines = preview.summary.join('\n');
-    expect(lines).toMatch(/main-gw.*agentic-retrieve target 'main-gw-agentic' will be removed \(was the last KB\)/);
+    expect(lines).toMatch(/Gateway target: 'docs' on 'main-gw' will be removed/);
   });
 });

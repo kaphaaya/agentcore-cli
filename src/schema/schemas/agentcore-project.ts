@@ -677,14 +677,25 @@ export const AgentCoreProjectSpecSchema = z
     for (const gateway of spec.agentCoreGateways ?? []) {
       for (const target of gateway.targets ?? []) {
         if (target.targetType !== 'connector') continue;
-        if (target.connectorId !== 'bedrock-knowledge-bases' && target.connectorId !== 'bedrock-agentic-retrieve') {
+        if (target.connectorId !== 'bedrock-knowledge-bases') {
           continue;
         }
-        if (target.knowledgeBaseId) {
-          validateKbReference(target, target.knowledgeBaseId, 'knowledgeBaseId');
-        }
-        for (const value of target.knowledgeBaseIds ?? []) {
-          validateKbReference(target, value, 'knowledgeBaseIds[]');
+        for (const cfg of target.configurations ?? []) {
+          const pv = cfg.parameterValues;
+          if (cfg.name === 'Retrieve' && pv?.knowledgeBaseId && typeof pv.knowledgeBaseId === 'string') {
+            validateKbReference(target, pv.knowledgeBaseId, 'configurations[].parameterValues.knowledgeBaseId');
+          }
+          if (cfg.name === 'AgenticRetrieveStream') {
+            const rawRetrievers = pv?.retrievers;
+            if (!Array.isArray(rawRetrievers)) continue;
+            for (const r of rawRetrievers) {
+              if (!r || typeof r !== 'object') continue;
+              const kbId = (r as { configuration?: { knowledgeBase?: { knowledgeBaseId?: string } } }).configuration
+                ?.knowledgeBase?.knowledgeBaseId;
+              if (kbId)
+                validateKbReference(target, kbId, 'configurations[].parameterValues.retrievers[].knowledgeBaseId');
+            }
+          }
         }
       }
     }
