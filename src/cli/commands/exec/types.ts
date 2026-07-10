@@ -3,6 +3,9 @@ import type { Result } from '../../../lib/result';
 export interface ExecOptions {
   /** Target runtime ARN (from --runtime). Skips agent picker when provided. */
   runtimeArn?: string;
+  /** Target harness name or harness ARN (from --harness). A name is resolved to the harness ARN
+   *  from deployed state; a full `arn:` value is used directly. Skips agent picker when provided. */
+  harnessName?: string;
   /** Routes the connection to a specific VM (from --session-id). */
   sessionId?: string;
   /** Reconnect to an existing shell (from --shell-id). Maps to `shellId` query param at the wire boundary. */

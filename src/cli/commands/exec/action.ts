@@ -16,13 +16,49 @@ export interface ExecContext {
   runtimeArn: string;
 }
 
+/** True when `arn` is a harness ARN (…:harness/…) rather than a runtime ARN (…:runtime/…). */
+function isHarnessArn(arn: string): boolean {
+  return arn.includes(':harness/');
+}
+
+/** Guard interactive (`--it`) exec against harness targets.
+ *  The data plane (InvokeAgentRuntimeCommandShell) explicitly rejects harness-linked runtimes:
+ *  interactive shell is not supported for harnesses yet. One-shot exec IS supported (routes through
+ *  the harness ExecuteCommand path), so fail fast here with actionable guidance instead of letting
+ *  the WebSocket connection surface an opaque service error. */
+function assertInteractiveHarnessUnsupported(options: ExecOptions, ctx: ExecContext): ExecContext {
+  if (options.interactive && isHarnessArn(ctx.runtimeArn)) {
+    throw new Error(
+      'Interactive shell (--it) is not supported for harness deployments yet. ' +
+        'Use one-shot exec instead, e.g. `agentcore exec "<command>"`.'
+    );
+  }
+  return ctx;
+}
+
 /** Resolve region + runtimeArn from options and/or agentcore.json deployed state.
  *  --runtime accepts either a full ARN (arn:...) or an agent name from deployed state.
  */
 export async function loadExecContext(options: ExecOptions, configIO: ConfigIO = new ConfigIO()): Promise<ExecContext> {
+  // Mutual exclusion: --runtime and --harness cannot both be set. Checked first so it applies to
+  // every path below, including the ARN short-circuits (where --runtime is a full ARN, not a name).
+  if (options.runtimeArn && options.harnessName) {
+    throw new Error('Cannot specify both --runtime and --harness.');
+  }
+
   // Short-circuit: explicit ARN + region — no need to read deployed state
   if (options.runtimeArn?.startsWith('arn:') && options.region) {
-    return { region: options.region, runtimeArn: options.runtimeArn };
+    return assertInteractiveHarnessUnsupported(options, { region: options.region, runtimeArn: options.runtimeArn });
+  }
+
+  // Same short-circuit for --harness <arn> + region. Validate it's a harness ARN (not a runtime ARN).
+  if (options.harnessName?.startsWith('arn:') && options.region) {
+    if (!isHarnessArn(options.harnessName)) {
+      throw new Error(
+        `--harness expects a harness ARN (…:harness/…), got '${options.harnessName}'. Use --runtime for a runtime ARN.`
+      );
+    }
+    return assertInteractiveHarnessUnsupported(options, { region: options.region, runtimeArn: options.harnessName });
   }
 
   const awsTargets = await configIO.readAWSDeploymentTargets();
@@ -47,13 +83,44 @@ export async function loadExecContext(options: ExecOptions, configIO: ConfigIO =
 
   const targetState = deployedState.targets[targetName];
   const runtimeKeys = Object.keys(targetState?.resources?.runtimes ?? {});
-  if (runtimeKeys.length === 0) {
-    throw new Error(`No deployed runtimes found in target '${targetName}'.`);
-  }
+  const harnessKeys = Object.keys(targetState?.resources?.harnesses ?? {});
 
   // --runtime <arn> with no --region: ARN provided but region must come from config
   if (options.runtimeArn?.startsWith('arn:')) {
-    return { region: options.region ?? targetConfig.region, runtimeArn: options.runtimeArn };
+    return assertInteractiveHarnessUnsupported(options, {
+      region: options.region ?? targetConfig.region,
+      runtimeArn: options.runtimeArn,
+    });
+  }
+
+  // --harness <name|arn>: resolve to the harness ARN.
+  // exec must target the harness ARN, NOT the underlying agentRuntimeArn: the data plane blocks
+  // ExecuteCommand / shell against a harness-linked runtime ARN, but routes a harness ARN on the
+  // /runtimes/{arn}/... path through the harness exec path (delegates to LoopyDP).
+  if (options.harnessName) {
+    // A full ARN is used directly (must be a harness ARN, not a runtime ARN); a name is looked up.
+    if (options.harnessName.startsWith('arn:')) {
+      if (!isHarnessArn(options.harnessName)) {
+        throw new Error(
+          `--harness expects a harness ARN (…:harness/…), got '${options.harnessName}'. Use --runtime for a runtime ARN.`
+        );
+      }
+      return assertInteractiveHarnessUnsupported(options, {
+        region: options.region ?? targetConfig.region,
+        runtimeArn: options.harnessName,
+      });
+    }
+
+    const harnessState = targetState?.resources?.harnesses?.[options.harnessName];
+    if (!harnessState) {
+      throw new Error(
+        `Harness '${options.harnessName}' not found in target '${targetName}'. Available harnesses: ${harnessKeys.join(', ')}`
+      );
+    }
+    return assertInteractiveHarnessUnsupported(options, {
+      region: options.region ?? targetConfig.region,
+      runtimeArn: harnessState.harnessArn,
+    });
   }
 
   // --runtime <name>: look up by agent name in deployed state
@@ -64,25 +131,34 @@ export async function loadExecContext(options: ExecOptions, configIO: ConfigIO =
         `Agent '${options.runtimeArn}' not found in target '${targetName}'. Available agents: ${runtimeKeys.join(', ')}`
       );
     }
-    return { region: options.region ?? targetConfig.region, runtimeArn: agentState.runtimeArn };
+    return assertInteractiveHarnessUnsupported(options, {
+      region: options.region ?? targetConfig.region,
+      runtimeArn: agentState.runtimeArn,
+    });
   }
 
-  // No --runtime: error if ambiguous, auto-select if only one agent deployed
-  if (runtimeKeys.length > 1) {
+  // No flag: exec needs exactly one target. Both buckets collapse to a single candidate list —
+  // exec only ever wants one ARN, so the count is what matters, not the kind. Harnesses resolve to
+  // their harness ARN (not agentRuntimeArn — see the --harness branch above for why).
+  const candidates = [
+    ...Object.values(targetState?.resources?.runtimes ?? {}).map(r => r.runtimeArn),
+    ...Object.values(targetState?.resources?.harnesses ?? {}).map(h => h.harnessArn),
+  ].filter(Boolean);
+
+  if (candidates.length === 0) {
+    throw new Error(`No deployed runtimes or harnesses found in target '${targetName}'.`);
+  }
+  if (candidates.length > 1) {
     throw new Error(
-      `Multiple agents deployed in target '${targetName}'. Specify one with --runtime <name>: ${runtimeKeys.join(', ')}`
+      `Target '${targetName}' has multiple deploy targets. Specify one with --runtime <name> or --harness <name>: ` +
+        [...runtimeKeys, ...harnessKeys].join(', ')
     );
   }
 
-  const agentState = targetState?.resources?.runtimes?.[runtimeKeys[0]!];
-  if (!agentState?.runtimeArn) {
-    throw new Error('Could not determine runtime ARN from deployed state.');
-  }
-
-  return {
+  return assertInteractiveHarnessUnsupported(options, {
     region: options.region ?? targetConfig.region,
-    runtimeArn: agentState.runtimeArn,
-  };
+    runtimeArn: candidates[0]!,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +485,7 @@ export async function runInteractiveShell(options: ExecOptions): Promise<void> {
     {
       interactive: true,
       has_runtime: Boolean(options.runtimeArn),
+      has_harness: Boolean(options.harnessName),
       has_shell_id: Boolean(options.shellId),
       has_session_id: Boolean(options.sessionId),
       is_one_shot: false,

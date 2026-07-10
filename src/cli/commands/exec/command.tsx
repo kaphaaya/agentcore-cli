@@ -32,6 +32,7 @@ export const registerExec = (program: Command) => {
     .argument('[command...]', 'Command to execute (one-shot mode, non-interactive)')
     .option('--it', 'Open an interactive PTY shell session')
     .option('--runtime <name|arn>', 'Target agent name or runtime ARN (skips agent picker)')
+    .option('--harness <name|arn>', 'Target harness name or harness ARN (skips agent picker)')
     .option('--session-id <id>', 'Pin to a specific runtime session / VM')
     .option('--shell-id <id>', 'Reconnect to an existing shell')
     .option('--region <region>', 'AWS region')
@@ -45,6 +46,7 @@ export const registerExec = (program: Command) => {
         cliOptions: {
           it?: boolean;
           runtime?: string;
+          harness?: string;
           sessionId?: string;
           shellId?: string;
           region?: string;
@@ -55,10 +57,12 @@ export const registerExec = (program: Command) => {
         }
       ) => {
         try {
-          // Skip project check only when --runtime is a full ARN: the user has all the
+          // Skip project check only when --runtime or --harness is a full ARN: the user has all the
           // information they need without an agentcore.json in the working directory.
-          // A name-based --runtime still requires the project to resolve the ARN.
-          if (!cliOptions.runtime?.startsWith('arn:')) {
+          // A name-based --runtime/--harness still requires the project to resolve the ARN.
+          const hasArnTarget =
+            Boolean(cliOptions.runtime?.startsWith('arn:')) || Boolean(cliOptions.harness?.startsWith('arn:'));
+          if (!hasArnTarget) {
             if (cliOptions.json) {
               // requireProject() renders Ink and calls process.exit — bypass it in JSON mode
               // so we can emit a machine-readable error instead.
@@ -103,6 +107,7 @@ export const registerExec = (program: Command) => {
 
           const options: ExecOptions = {
             runtimeArn: cliOptions.runtime,
+            harnessName: cliOptions.harness,
             sessionId: cliOptions.sessionId,
             shellId: cliOptions.shellId,
             interactive: cliOptions.it,
@@ -128,6 +133,7 @@ export const registerExec = (program: Command) => {
               {
                 interactive: false,
                 has_runtime: Boolean(options.runtimeArn),
+                has_harness: Boolean(options.harnessName),
                 has_shell_id: Boolean(options.shellId),
                 has_session_id: Boolean(options.sessionId),
                 is_one_shot: true,
@@ -149,14 +155,15 @@ export const registerExec = (program: Command) => {
           }
 
           // ── Interactive mode ───────────────────────────────────────────────
-          // With --runtime: skip agent picker, go straight to PTY
-          if (options.runtimeArn) {
+          // With --runtime or --harness: skip agent picker, go straight to PTY.
+          // loadExecContext resolves either flag to a concrete ARN, so the picker is unnecessary.
+          if (options.runtimeArn || options.harnessName) {
             requireTTY();
             await runInteractiveShell(options);
             process.exit(0);
           }
 
-          // Without --runtime: mount ExecScreen to let user pick agent, then PTY, then loop
+          // Without --runtime/--harness: mount ExecScreen to let user pick agent, then PTY, then loop
           requireTTY();
           await runExecLoop(options);
           process.exit(0);
@@ -181,7 +188,15 @@ export async function runExecLoop(options: ExecOptions = {}): Promise<void> {
     const picked = await pickAgent();
     if (!picked) break; // user pressed Esc
 
-    const shellOptions: ExecOptions = { ...options, runtimeArn: picked.runtimeArn, sessionId: picked.sessionId };
+    // This loop always opens a PTY (handleShellSession), so it is inherently interactive — set the
+    // flag explicitly so loadExecContext's interactive-harness guard fires even when a caller (e.g.
+    // the TUI exit-action path) invoked runExecLoop() without options.interactive set.
+    const shellOptions: ExecOptions = {
+      ...options,
+      interactive: true,
+      runtimeArn: picked.runtimeArn,
+      sessionId: picked.sessionId,
+    };
 
     let sessionError: unknown;
     try {
@@ -190,6 +205,7 @@ export async function runExecLoop(options: ExecOptions = {}): Promise<void> {
         {
           interactive: true,
           has_runtime: Boolean(shellOptions.runtimeArn),
+          has_harness: Boolean(shellOptions.harnessName),
           has_shell_id: Boolean(shellOptions.shellId),
           has_session_id: Boolean(shellOptions.sessionId),
           is_one_shot: false,
