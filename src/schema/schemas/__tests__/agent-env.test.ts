@@ -506,6 +506,12 @@ describe('AgentEnvSpecSchema - dockerfile', () => {
     );
   });
 
+  it('accepts a relative subpath (resolved against the build context)', () => {
+    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: 'docker/Dockerfile' }).success).toBe(
+      true
+    );
+  });
+
   it('rejects dockerfile on CodeZip builds', () => {
     const result = AgentEnvSpecSchema.safeParse({ ...validCodeZipAgent, dockerfile: 'Dockerfile.custom' });
     expect(result.success).toBe(false);
@@ -514,11 +520,10 @@ describe('AgentEnvSpecSchema - dockerfile', () => {
     }
   });
 
-  it('rejects path traversal or path separator in dockerfile', () => {
+  it('rejects path traversal and absolute paths in dockerfile', () => {
     expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: '../Dockerfile' }).success).toBe(false);
-    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: 'path/to/Dockerfile' }).success).toBe(
-      false
-    );
+    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: 'a/../secret' }).success).toBe(false);
+    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: '/etc/Dockerfile' }).success).toBe(false);
   });
 
   it('rejects empty string dockerfile', () => {
@@ -546,6 +551,171 @@ describe('AgentEnvSpecSchema - dockerfile', () => {
       false
     );
     expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: '..\\Dockerfile' }).success).toBe(false);
+  });
+
+  it('rejects a trailing slash (a directory-shaped value would make `docker build -f docker/` fail)', () => {
+    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: 'docker/' }).success).toBe(false);
+  });
+
+  it('rejects an empty path segment (double slash)', () => {
+    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: 'a//Dockerfile' }).success).toBe(false);
+  });
+
+  it('accepts a leading-dot directory (e.g. .docker/Dockerfile)', () => {
+    expect(AgentEnvSpecSchema.safeParse({ ...validContainerAgent, dockerfile: '.docker/Dockerfile' }).success).toBe(
+      true
+    );
+  });
+});
+
+describe('AgentEnvSpecSchema - buildContextPath', () => {
+  const validContainerAgent = {
+    name: 'ContainerAgent',
+    build: 'Container',
+    entrypoint: 'main.py',
+    codeLocation: './agents/container',
+  };
+
+  const validCodeZipAgent = {
+    name: 'CodeZipAgent',
+    build: 'CodeZip',
+    entrypoint: 'main.py:handler',
+    codeLocation: './agents/test',
+    runtimeVersion: 'PYTHON_3_12',
+  };
+
+  it('accepts Container agent with buildContextPath', () => {
+    const result = AgentEnvSpecSchema.safeParse({ ...validContainerAgent, buildContextPath: '.' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.buildContextPath).toBe('.');
+    }
+  });
+
+  it('accepts Container agent without buildContextPath (optional)', () => {
+    const result = AgentEnvSpecSchema.safeParse(validContainerAgent);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.buildContextPath).toBeUndefined();
+    }
+  });
+
+  it('rejects buildContextPath on CodeZip builds', () => {
+    const result = AgentEnvSpecSchema.safeParse({ ...validCodeZipAgent, buildContextPath: '.' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some(i => i.message.includes('only allowed for Container'))).toBe(true);
+    }
+  });
+});
+
+describe('AgentEnvSpecSchema - customDockerBuildArgs', () => {
+  const validContainerAgent = {
+    name: 'ContainerAgent',
+    build: 'Container',
+    entrypoint: 'main.py',
+    codeLocation: './agents/container',
+  };
+
+  const validCodeZipAgent = {
+    name: 'CodeZipAgent',
+    build: 'CodeZip',
+    entrypoint: 'main.py:handler',
+    codeLocation: './agents/test',
+    runtimeVersion: 'PYTHON_3_12',
+  };
+
+  it('accepts Container agent with customDockerBuildArgs', () => {
+    const result = AgentEnvSpecSchema.safeParse({
+      ...validContainerAgent,
+      customDockerBuildArgs: { AGENT_NAME: 'dummyagent', BUILD_ENV: 'prod' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.customDockerBuildArgs).toEqual({ AGENT_NAME: 'dummyagent', BUILD_ENV: 'prod' });
+    }
+  });
+
+  it('accepts Container agent without customDockerBuildArgs (optional)', () => {
+    const result = AgentEnvSpecSchema.safeParse(validContainerAgent);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.customDockerBuildArgs).toBeUndefined();
+    }
+  });
+
+  it('rejects customDockerBuildArgs on CodeZip builds', () => {
+    const result = AgentEnvSpecSchema.safeParse({ ...validCodeZipAgent, customDockerBuildArgs: { KEY: 'val' } });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some(i => i.message.includes('only allowed for Container'))).toBe(true);
+    }
+  });
+
+  it('accepts empty customDockerBuildArgs object', () => {
+    const result = AgentEnvSpecSchema.safeParse({ ...validContainerAgent, customDockerBuildArgs: {} });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a key that is not a valid identifier', () => {
+    expect(
+      AgentEnvSpecSchema.safeParse({ ...validContainerAgent, customDockerBuildArgs: { 'has-dash': 'v' } }).success
+    ).toBe(false);
+  });
+
+  it.each([
+    'IMAGE_URI',
+    'ECR_REGISTRY',
+    'DOCKERFILE_PATH',
+    'BUILD_ARG_FLAGS',
+    'AWS_DEFAULT_REGION',
+    'CODEBUILD_FOO',
+    'PATH',
+    'HOME',
+    'IFS',
+    'LD_PRELOAD',
+    'LD_LIBRARY_PATH',
+    'DOCKER_HOST',
+    'DOCKER_CONFIG',
+  ])('rejects the build-environment-reserved key %s (would break only on deploy)', key => {
+    const result = AgentEnvSpecSchema.safeParse({ ...validContainerAgent, customDockerBuildArgs: { [key]: 'v' } });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some(i => i.message.includes('reserved by the build environment'))).toBe(true);
+    }
+  });
+
+  it.each(['USER', 'LANG', 'SHELL', 'TERM'])('accepts the common non-dangerous build-arg key %s', key => {
+    // Legitimate Dockerfile ARGs (e.g. `ARG USER` -> `useradd $USER`) must not be over-rejected.
+    const result = AgentEnvSpecSchema.safeParse({ ...validContainerAgent, customDockerBuildArgs: { [key]: 'v' } });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a normal value with spaces and symbols', () => {
+    const result = AgentEnvSpecSchema.safeParse({
+      ...validContainerAgent,
+      customDockerBuildArgs: { GREETING: 'hello world = ok!' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a value containing a newline or control character', () => {
+    const result = AgentEnvSpecSchema.safeParse({
+      ...validContainerAgent,
+      customDockerBuildArgs: { BAD: 'line1\nline2' },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some(i => i.message.includes('control characters'))).toBe(true);
+    }
+  });
+
+  it('rejects a value longer than 4096 characters', () => {
+    const result = AgentEnvSpecSchema.safeParse({
+      ...validContainerAgent,
+      customDockerBuildArgs: { BIG: 'x'.repeat(4097) },
+    });
+    expect(result.success).toBe(false);
   });
 });
 

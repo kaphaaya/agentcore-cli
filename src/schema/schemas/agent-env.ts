@@ -94,6 +94,88 @@ export const EntrypointSchema = z
 
 const DirectoryPathSchema = z.string().min(1) as unknown as z.ZodType<DirectoryPath>;
 
+// Char-safe set only (no backslash, spaces, or shell metacharacters): on deploy the buildspec
+// interpolates this unquoted as `docker build -f $DOCKERFILE_PATH`. A leading '.' is allowed so
+// conventional paths like '.docker/Dockerfile' pass.
+const DOCKERFILE_PATH_ALLOWED_CHARS = /^[A-Za-z0-9._/-]+$/;
+
+/**
+ * True when `p` is a safe relative Dockerfile path within the build context: allowed chars only, no
+ * leading slash (absolute), and no empty ('' from a leading/trailing/double slash) or '..' segments.
+ *
+ * The single source of truth shared by `DockerfilePathSchema` (config-validation time) and the runtime
+ * `getDockerfilePath` guard, so the two can never diverge — e.g. one accepting '.docker/Dockerfile'
+ * while the other rejects it, or one accepting a trailing-slash directory value like 'docker/'.
+ */
+export function isValidDockerfilePath(p: string): boolean {
+  if (!DOCKERFILE_PATH_ALLOWED_CHARS.test(p)) return false;
+  if (p.startsWith('/')) return false;
+  return !p.split('/').some(segment => segment === '' || segment === '..');
+}
+
+/**
+ * Dockerfile location for Container builds, resolved relative to the Docker build context
+ * (`buildContextPath` when set, otherwise `codeLocation`). Accepts a filename ('Dockerfile',
+ * 'Dockerfile.gpu') or a forward-slash relative subpath ('docker/Dockerfile'). Absolute paths,
+ * trailing/double slashes, and '..' traversal are rejected so the Dockerfile can never escape or
+ * name the build context directory itself.
+ */
+const DockerfilePathSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine(
+    isValidDockerfilePath,
+    'Must be a relative path within the build context: a filename or forward-slash subpath using only letters, digits, dot, dash, underscore, and slash; no leading slash, no ".." traversal, and no empty segments (no trailing or double slash)'
+  );
+
+/**
+ * Build-arg names reserved by the CodeBuild build environment. On deploy each build arg becomes a
+ * CodeBuild environment-variable override alongside the buildspec's own control vars, so a colliding
+ * name would break the deploy build — a wrong image tag / ECR region, a rejected StartBuild, or a
+ * clobbered build-container shell. We reject the buildspec control vars, the process-critical shell
+ * vars, and CodeBuild's own `AWS_*` / `CODEBUILD_*` namespaces. This is a best-effort denylist (the
+ * shell has other sensitive vars), but it covers the realistic footguns and keeps a config that
+ * builds locally from failing only on deploy.
+ */
+export const RESERVED_BUILD_ARG_KEYS = [
+  // Buildspec control vars (mirrored in @aws/agentcore-cdk's ContainerBuildProject / build handler).
+  'ECR_REGISTRY',
+  'IMAGE_URI',
+  'DOCKERFILE_PATH',
+  'BUILD_ARG_FLAGS',
+  // Overriding these in the build shell would break the buildspec's own commands (command lookup,
+  // word-splitting, dynamic linking) or redirect the docker client off the build daemon. Kept
+  // deliberately narrow to the genuinely-dangerous names so common ARGs (e.g. USER, LANG) stay usable.
+  'PATH',
+  'HOME',
+  'IFS',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+  'DOCKER_HOST',
+  'DOCKER_CONFIG',
+  'DOCKER_TLS_VERIFY',
+  'DOCKER_CERT_PATH',
+];
+
+export function isReservedBuildArgKey(key: string): boolean {
+  return RESERVED_BUILD_ARG_KEYS.includes(key) || key.startsWith('CODEBUILD_') || key.startsWith('AWS_');
+}
+
+/**
+ * Build-arg value. Bounded and control-char-free because on deploy each value becomes a CodeBuild
+ * `environmentVariablesOverride` PLAINTEXT entry; newlines/control chars or an over-long value can be
+ * rejected by StartBuild, so we reject them at schema time rather than let a local-only-valid config
+ * fail on deploy.
+ */
+const BuildArgValueSchema = z
+  .string()
+  .max(4096, 'Build arg values must be at most 4096 characters')
+  .refine(
+    v => ![...v].some(ch => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f),
+    'Build arg values must not contain control characters (including newlines)'
+  );
+
 export const EnvVarSchema = z.object({
   name: EnvVarNameSchema,
   value: z.string(),
@@ -319,13 +401,29 @@ export const AgentEnvSpecSchema = z
     build: BuildTypeSchema,
     entrypoint: EntrypointSchema,
     codeLocation: DirectoryPathSchema,
-    /** Custom Dockerfile name for Container builds. Must be a filename, not a path. Default: 'Dockerfile' */
-    dockerfile: z
-      .string()
-      .min(1)
-      .max(255)
-      .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'Must be a filename (no path separators or traversal)')
-      .optional(),
+    /**
+     * Dockerfile for Container builds, resolved relative to the build context (`buildContextPath`
+     * when set, otherwise `codeLocation`). A filename or a relative subpath; no traversal. Default: 'Dockerfile'.
+     */
+    dockerfile: DockerfilePathSchema.optional(),
+    /**
+     * Docker build context directory for Container builds. When set, this directory (instead of
+     * `codeLocation`) is used as the `docker build` context and as the root the Dockerfile path is
+     * resolved against, so a single Dockerfile can be shared across multiple agents in a monorepo
+     * (e.g. so it can COPY files that live outside `codeLocation`). Container builds only.
+     *
+     * Like `codeLocation`, this is intentionally not containment-checked: the config author may point
+     * it at any directory (including a parent via `..` for a monorepo root). The unconditional
+     * secret-exclusion baseline on the deploy upload still applies to whatever directory is chosen.
+     */
+    buildContextPath: DirectoryPathSchema.optional(),
+    /**
+     * Custom build arguments passed to `docker build` as `--build-arg` flags. Keys must be valid
+     * environment-variable names (each arg is forwarded to the build as an env var), reusing
+     * `EnvVarNameSchema`. Useful for parameterising a shared Dockerfile per agent
+     * (e.g. `{ "AGENT_NAME": "myagent" }`). Container builds only.
+     */
+    customDockerBuildArgs: z.record(EnvVarNameSchema, BuildArgValueSchema).optional(),
     runtimeVersion: RuntimeVersionSchemaFromConstants.optional(),
     /** Environment variables to set on the runtime */
     envVars: z.array(EnvVarSchema).optional(),
@@ -410,13 +508,25 @@ export const AgentEnvSpecSchema = z
         path: ['authorizerConfiguration'],
       });
     }
-    // If adding more Container-specific fields, consider consolidating into a containerConfig object (see networkConfig pattern)
-    if (data.build !== 'Container' && data.dockerfile) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'dockerfile is only allowed for Container builds',
-        path: ['dockerfile'],
-      });
+    // Container-only fields. If adding more, extend this list (and consider consolidating into a
+    // containerConfig object — see the networkConfig pattern).
+    for (const field of ['dockerfile', 'buildContextPath', 'customDockerBuildArgs'] as const) {
+      if (data.build !== 'Container' && data[field]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${field} is only allowed for Container builds`,
+          path: [field],
+        });
+      }
+    }
+    for (const key of Object.keys(data.customDockerBuildArgs ?? {})) {
+      if (isReservedBuildArgKey(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `customDockerBuildArgs key "${key}" is reserved by the build environment (must not be ${RESERVED_BUILD_ARG_KEYS.join(', ')}, or start with CODEBUILD_ or AWS_)`,
+          path: ['customDockerBuildArgs', key],
+        });
+      }
     }
     const fcs = data.filesystemConfigurations ?? [];
     if (fcs.length > 0) {

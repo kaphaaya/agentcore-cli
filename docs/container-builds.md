@@ -91,6 +91,73 @@ All other fields work the same as CodeZip agents.
 > must also add a `Dockerfile` and `.dockerignore` to the agent's code directory. The easiest way is to create a
 > throwaway container agent with `agentcore add agent --build Container` and copy the generated files.
 
+### Advanced: Shared Dockerfile (monorepo)
+
+When multiple agents share the same build logic, you can point them all at a single `Dockerfile` using two optional
+fields:
+
+| Field                   | Description                                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `buildContextPath`      | Docker build context directory. Replaces `codeLocation` as the `docker build` context and as the root the `dockerfile` path is resolved against. |
+| `customDockerBuildArgs` | Key/value pairs forwarded as `--build-arg` flags, allowing a shared Dockerfile to branch per agent. Keys must be valid identifiers.              |
+
+Both fields are honored identically by local `agentcore dev` / `agentcore package` and by `agentcore deploy` (which
+builds in CodeBuild). The `dockerfile` field is resolved relative to the build context, so with `buildContextPath: "."`
+the default `Dockerfile` refers to `./Dockerfile` at the project root. `dockerfile` may also be a relative subpath (e.g.
+`docker/Dockerfile` or `.docker/Dockerfile`); absolute paths, `..` traversal, and directory-shaped values (a trailing
+slash) are rejected.
+
+**Example — two agents, one shared `Dockerfile` at the project root:**
+
+```json
+{
+  "name": "agent-one",
+  "build": "Container",
+  "entrypoint": "main.py",
+  "codeLocation": "app/agent-one/",
+  "buildContextPath": ".",
+  "customDockerBuildArgs": { "AGENT_NAME": "agent-one" }
+},
+{
+  "name": "agent-two",
+  "build": "Container",
+  "entrypoint": "main.py",
+  "codeLocation": "app/agent-two/",
+  "buildContextPath": ".",
+  "customDockerBuildArgs": { "AGENT_NAME": "agent-two" }
+}
+```
+
+The shared `Dockerfile` can then branch on the build arg:
+
+```dockerfile
+ARG AGENT_NAME
+COPY app/${AGENT_NAME}/ ./app/
+```
+
+**When to use `buildContextPath`:** use it when your `Dockerfile` needs to `COPY` files that live outside of
+`codeLocation` (e.g. shared libraries at the project root). Without it, Docker only sees the `codeLocation` directory as
+its build context.
+
+> **Secrets and build junk are excluded from the upload — always.** On `agentcore deploy`, the build context uploaded to
+> CodeBuild (whether it's `codeLocation` or a `buildContextPath`) always has a baseline of secret/junk patterns excluded
+> — `.env`, `.env.*`, `.git`, `.venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.DS_Store` — at every depth
+> (nested `app/agent-one/.env` and `app/agent-one/node_modules` are excluded too, not just the top level). So a stray
+> `.env` is never persisted to the assets bucket or baked into the deployed image, regardless of whether you have a
+> `.dockerignore`. Your own `.dockerignore` at the build-context root is honored on top of this baseline (exclude more,
+> or re-include a baseline path with a `!pattern` line), and the `Dockerfile` itself is always kept even under an
+> allowlist-style (`*`) `.dockerignore`.
+>
+> **A `.dockerignore` is also generated for local builds when you set `buildContextPath`.** The whole of that directory
+> is the build context — for `buildContextPath: "."` that's your entire project — and a local `docker build` honors only
+> a real `.dockerignore`. So if none exists at that root, `agentcore dev` / `agentcore package` creates one (the same
+> baseline above, listed both bare and `**/`-prefixed, plus `agentcore/`) so your local image matches the deploy upload.
+> It's an ordinary file — commit it, and edit it to include anything you intentionally want in the context (e.g. a
+> non-secret `.env.production`, by adding a `!.env.production` line).
+
+**When to use `customDockerBuildArgs`:** use it to parameterise a shared `Dockerfile` so each agent produces a different
+image (different entry point, bundled code, etc.) without duplicating the file.
+
 ## Local Development
 
 ```bash

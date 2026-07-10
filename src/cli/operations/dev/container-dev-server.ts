@@ -1,5 +1,6 @@
 import { CONTAINER_INTERNAL_PORT, DOCKERFILE_NAME, getDockerfilePath } from '../../../lib';
-import { getUvBuildArgs } from '../../../lib/packaging/build-args';
+import { getCustomBuildArgs, getUvBuildArgs } from '../../../lib/packaging/build-args';
+import { ensureBuildContextDockerignore } from '../../../lib/packaging/build-context-dockerignore';
 import { detectContainerRuntime } from '../../external-requirements/detect';
 import { DevServer, type LogLevel, type SpawnConfig } from './dev-server';
 import { waitForServerReady } from './utils';
@@ -65,12 +66,26 @@ export class ContainerDevServer extends DevServer {
     }
     this.runtimeBinary = runtime.binary;
 
-    // 2. Verify Dockerfile exists
+    // 2. Verify Dockerfile exists (resolved relative to the build context, matching deploy)
+    const buildContext = this.config.buildContextPath ?? this.config.directory;
     const dockerfileName = this.config.dockerfile ?? DOCKERFILE_NAME;
-    const dockerfilePath = getDockerfilePath(this.config.directory, this.config.dockerfile);
+    const dockerfilePath = getDockerfilePath(buildContext, this.config.dockerfile);
     if (!existsSync(dockerfilePath)) {
       onLog('error', `${dockerfileName} not found at ${dockerfilePath}. Container agents require a Dockerfile.`);
       return false;
+    }
+
+    // Dockerfile validated — when buildContextPath widens the context, ensure a .dockerignore keeps
+    // secrets/junk out of the local image (the same file the deploy path honors). No-op if the dir is
+    // missing or a .dockerignore already exists.
+    if (this.config.buildContextPath) {
+      const created = ensureBuildContextDockerignore(buildContext);
+      if (created) {
+        onLog(
+          'system',
+          `Created ${created} with default secret exclusions (buildContextPath is set); review and commit it.`
+        );
+      }
     }
 
     // 3. Remove any stale container from a previous run (prevents "proxy already running" errors)
@@ -78,8 +93,9 @@ export class ContainerDevServer extends DevServer {
 
     // 4. Build the container image, streaming output in real-time
     onLog('system', `Building container image: ${this.imageName}...`);
+    const buildArgFlags = getCustomBuildArgs(this.config.customDockerBuildArgs);
     const exitCode = await this.streamBuild(
-      ['-t', this.imageName, '-f', dockerfilePath, ...getUvBuildArgs(), this.config.directory],
+      ['-t', this.imageName, '-f', dockerfilePath, ...getUvBuildArgs(), ...buildArgFlags, buildContext],
       onLog
     );
 

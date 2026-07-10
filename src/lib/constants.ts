@@ -1,3 +1,4 @@
+import { isValidDockerfilePath } from '../schema';
 import { join } from 'path';
 
 // Re-export all schema constants from schema
@@ -51,14 +52,21 @@ export type ContainerRuntime = 'docker' | 'podman' | 'finch';
 export const CONTAINER_RUNTIMES: ContainerRuntime[] = ['docker', 'podman', 'finch'];
 
 /**
- * Get the Dockerfile path for a given code location.
- * @param codeLocation - Directory containing the Dockerfile
- * @param dockerfile - Custom Dockerfile name (default: 'Dockerfile')
+ * Resolve the Dockerfile path against the Docker build context.
+ * @param buildContext - The build context directory (`buildContextPath` when set, else `codeLocation`)
+ * @param dockerfile - Dockerfile name or relative subpath within the context (default: 'Dockerfile')
+ *
+ * `dockerfile` may be a filename ('Dockerfile') or a forward-slash relative subpath
+ * ('docker/Dockerfile'); absolute paths, backslashes, and `..` traversal are rejected so it can
+ * never escape the build context.
  */
-export function getDockerfilePath(codeLocation: string, dockerfile?: string): string {
+export function getDockerfilePath(buildContext: string, dockerfile?: string): string {
   const name = dockerfile ?? DOCKERFILE_NAME;
-  if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-    throw new Error(`Invalid dockerfile name: must be a filename without path separators or traversal`);
+  if (!isValidDockerfilePath(name)) {
+    throw new Error(
+      `Invalid dockerfile path "${name}": must be a relative path within the build context (a filename or ` +
+        `forward-slash subpath; no leading slash, backslash, empty segments, or ".." traversal)`
+    );
   }
-  return join(codeLocation, name);
+  return join(buildContext, name);
 }

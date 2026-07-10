@@ -121,6 +121,28 @@ describe('ContainerPackager', () => {
     expect(result.artifactPath).toBe('docker://agentcore-package-custom-agent');
   });
 
+  it('lower-cases the image tag for a mixed-case agent name (docker tags must be lowercase)', async () => {
+    mockResolveCodeLocation.mockReturnValue('/resolved/src');
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'which' && args[0] === 'docker') return { status: 0 };
+      if (cmd === 'docker' && args[0] === '--version') return { status: 0 };
+      if (cmd === 'docker' && args[0] === 'build') return { status: 0 };
+      if (cmd === 'docker' && args[0] === 'image') return { status: 0, stdout: Buffer.from('1000') };
+      return { status: 1 };
+    });
+
+    const result = await packager.pack({ ...baseSpec, name: 'AgentOne' } as any);
+
+    // Docker rejects uppercase in image tags; the default agent name is PascalCase, so it must be lowered.
+    expect(result.artifactPath).toBe('docker://agentcore-package-agentone');
+    const buildCall = mockSpawnSync.mock.calls.find(
+      (c: unknown[]) => c[0] === 'docker' && (c[1] as string[])[0] === 'build'
+    );
+    const buildArgs = buildCall![1] as string[];
+    expect(buildArgs[buildArgs.indexOf('-t') + 1]).toBe('agentcore-package-agentone');
+  });
+
   it('uses options.artifactDir as configBaseDir', async () => {
     mockResolveCodeLocation.mockReturnValue('/artifact/dir/src');
     mockExistsSync.mockReturnValue(true);
@@ -208,6 +230,61 @@ describe('ContainerPackager', () => {
 
     const specWithDockerfile = { ...baseSpec, dockerfile: 'Dockerfile.custom' };
     await expect(packager.pack(specWithDockerfile as any)).rejects.toThrow('Dockerfile.custom not found');
+  });
+
+  it('uses buildContextPath as docker build context instead of codeLocation', async () => {
+    mockResolveCodeLocation.mockImplementation((path: string) => {
+      if (path === './src') return '/resolved/src';
+      if (path === './context') return '/resolved/context';
+      return path;
+    });
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'which' && args[0] === 'docker') return { status: 0 };
+      if (cmd === 'docker' && args[0] === '--version') return { status: 0 };
+      if (cmd === 'docker' && args[0] === 'build') return { status: 0 };
+      if (cmd === 'docker' && args[0] === 'image') return { status: 0, stdout: Buffer.from('1000') };
+      return { status: 1 };
+    });
+
+    const specWithContext = { ...baseSpec, buildContextPath: './context' };
+    await packager.pack(specWithContext as any);
+
+    const buildCall = mockSpawnSync.mock.calls.find(
+      (c: unknown[]) => c[0] === 'docker' && (c[1] as string[])[0] === 'build'
+    );
+    expect(buildCall).toBeDefined();
+    const buildArgs = buildCall![1] as string[];
+    // Last arg should be the buildContextPath, not codeLocation
+    expect(buildArgs[buildArgs.length - 1]).toBe('/resolved/context');
+    // The Dockerfile (-f) must be resolved against the build context, not codeLocation — otherwise the
+    // local build diverges from the deploy build (which resolves it against the uploaded context root).
+    const fIdx = buildArgs.indexOf('-f');
+    expect(buildArgs[fIdx + 1]).toBe('/resolved/context/Dockerfile');
+  });
+
+  it('passes customDockerBuildArgs as --build-arg flags', async () => {
+    mockResolveCodeLocation.mockReturnValue('/resolved/src');
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'which' && args[0] === 'docker') return { status: 0 };
+      if (cmd === 'docker' && args[0] === '--version') return { status: 0 };
+      if (cmd === 'docker' && args[0] === 'build') return { status: 0 };
+      if (cmd === 'docker' && args[0] === 'image') return { status: 0, stdout: Buffer.from('1000') };
+      return { status: 1 };
+    });
+
+    const specWithBuildArgs = { ...baseSpec, customDockerBuildArgs: { AGENT_NAME: 'dummyagent', BUILD_ENV: 'prod' } };
+    await packager.pack(specWithBuildArgs as any);
+
+    const buildCall = mockSpawnSync.mock.calls.find(
+      (c: unknown[]) => c[0] === 'docker' && (c[1] as string[])[0] === 'build'
+    );
+    expect(buildCall).toBeDefined();
+    const buildArgs = buildCall![1] as string[];
+    expect(buildArgs).toContain('--build-arg');
+    expect(buildArgs).toContain('AGENT_NAME=dummyagent');
+    expect(buildArgs).toContain('BUILD_ENV=prod');
   });
 
   it('detects podman runtime last', async () => {

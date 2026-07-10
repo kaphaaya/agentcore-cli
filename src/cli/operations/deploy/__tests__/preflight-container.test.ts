@@ -3,28 +3,38 @@ import { validateContainerAgents } from '../preflight.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const { ensureMock } = vi.hoisted(() => ({ ensureMock: vi.fn() }));
+
 vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
 }));
 
-vi.mock('../../../../lib', () => ({
-  DOCKERFILE_NAME: 'Dockerfile',
-  getDockerfilePath: (codeLocation: string, dockerfile?: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const p = require('node:path') as typeof import('node:path');
-    return p.join(codeLocation, dockerfile ?? 'Dockerfile');
-  },
-  resolveCodeLocation: vi.fn((codeLocation: string, configBaseDir: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const p = require('node:path') as typeof import('node:path');
-    const repoRoot = p.dirname(configBaseDir);
-    return p.resolve(repoRoot, codeLocation);
-  }),
-  // Stub other exports that the module may pull in
-  ConfigIO: vi.fn(),
-  requireConfigRoot: vi.fn(),
-}));
+vi.mock('../../../../lib', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const p = require('node:path') as typeof import('node:path');
+  const resolveCodeLocation = (codeLocation: string, configBaseDir: string) =>
+    p.resolve(p.dirname(configBaseDir), codeLocation);
+  const getDockerfilePath = (buildContext: string, dockerfile?: string) =>
+    p.join(buildContext, dockerfile ?? 'Dockerfile');
+  return {
+    DOCKERFILE_NAME: 'Dockerfile',
+    getDockerfilePath,
+    resolveCodeLocation,
+    // Mirror the real shared resolver so existsSync/ensure are called with the same paths.
+    resolveBuildContext: (
+      spec: { codeLocation: string; buildContextPath?: string; dockerfile?: string },
+      baseDir: string
+    ) => {
+      const buildContext = resolveCodeLocation(spec.buildContextPath ?? spec.codeLocation, baseDir);
+      return { buildContext, dockerfilePath: getDockerfilePath(buildContext, spec.dockerfile) };
+    },
+    ensureBuildContextDockerignore: ensureMock,
+    // Stub other exports that the module may pull in
+    ConfigIO: vi.fn(),
+    requireConfigRoot: vi.fn(),
+  };
+});
 
 const mockedExistsSync = vi.mocked(existsSync);
 const mockedReadFileSync = vi.mocked(readFileSync);
@@ -133,6 +143,49 @@ describe('validateContainerAgents', () => {
     ]);
 
     expect(() => validateContainerAgents(spec, CONFIG_ROOT)).toThrow(/Dockerfile\.gpu not found/);
+  });
+
+  it('resolves the Dockerfile against buildContextPath when set', () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockValidDockerfile();
+
+    const spec = makeSpec([
+      { name: 'mono', build: 'Container', codeLocation: dir('agents/mono'), buildContextPath: dir('.') },
+    ]);
+
+    expect(() => validateContainerAgents(spec, CONFIG_ROOT)).not.toThrow();
+    // The Dockerfile is resolved from the build context (repo root), not the agent's codeLocation.
+    const calledPath = mockedExistsSync.mock.calls[0]?.[0] as string;
+    expect(calledPath).not.toContain('agents/mono');
+  });
+
+  it('generates a build-context .dockerignore (and logs) when buildContextPath is set and none exists', () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockValidDockerfile();
+    // Simulate "created" — return the path so the preflight logs it.
+    ensureMock.mockReturnValue('/project/.dockerignore');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const spec = makeSpec([
+      { name: 'mono', build: 'Container', codeLocation: dir('agents/mono'), buildContextPath: dir('.') },
+    ]);
+
+    expect(() => validateContainerAgents(spec, CONFIG_ROOT)).not.toThrow();
+    // Ensured against the resolved build context (repo root), not the agent's codeLocation.
+    const ensuredPath = ensureMock.mock.calls[0]?.[0] as string;
+    expect(ensuredPath).not.toContain('agents/mono');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('created'));
+    warnSpy.mockRestore();
+  });
+
+  it('does not touch .dockerignore when buildContextPath is unset', () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockValidDockerfile();
+
+    const spec = makeSpec([{ name: 'plain', build: 'Container', codeLocation: dir('agents/plain') }]);
+
+    validateContainerAgents(spec, CONFIG_ROOT);
+    expect(ensureMock).not.toHaveBeenCalled();
   });
 
   it('warns when Dockerfile uses deprecated bookworm base image', () => {

@@ -1,4 +1,10 @@
-import { ConfigIO, DOCKERFILE_NAME, getDockerfilePath, requireConfigRoot, resolveCodeLocation } from '../../../lib';
+import {
+  ConfigIO,
+  DOCKERFILE_NAME,
+  ensureBuildContextDockerignore,
+  requireConfigRoot,
+  resolveBuildContext,
+} from '../../../lib';
 import { StaleCdkConstructError, ValidationError } from '../../../lib/errors/types';
 import type { AgentCoreProjectSpec, AwsDeploymentTarget } from '../../../schema';
 import { validateAwsCredentials } from '../../aws/account';
@@ -198,15 +204,31 @@ export function validateContainerAgents(projectSpec: AgentCoreProjectSpec, confi
   const errors: string[] = [];
   for (const agent of projectSpec.runtimes || []) {
     if (agent.build === 'Container') {
-      const codeLocation = resolveCodeLocation(agent.codeLocation, configRoot);
-      const dockerfilePath = getDockerfilePath(codeLocation, agent.dockerfile);
+      // Build context + Dockerfile via the shared resolver (identical to how ContainerSourceAsset
+      // uploads the context and how the CodeBuild buildspec resolves the -f path).
+      const { buildContext, dockerfilePath } = resolveBuildContext(agent, configRoot);
 
       if (!existsSync(dockerfilePath)) {
         errors.push(
           `Agent "${agent.name}": ${agent.dockerfile ?? DOCKERFILE_NAME} not found at ${dockerfilePath}. Container agents require a Dockerfile.`
         );
-      } else {
-        warnDeprecatedBaseImage(dockerfilePath, agent.name);
+      }
+      warnDeprecatedBaseImage(dockerfilePath, agent.name);
+
+      // Dockerfile validated. buildContextPath widens the docker build context (e.g. the whole repo);
+      // ensure a .dockerignore at that root so secrets/junk (.env, .git, agentcore/) are never baked
+      // into the local image. Both local and deploy honor this file; it is created only when absent
+      // (never overwrites the user's) and only AFTER validation — so a failing deploy leaves no stray
+      // file and this never masks the friendly "Dockerfile not found" error above.
+      if (agent.buildContextPath) {
+        const created = ensureBuildContextDockerignore(buildContext);
+        if (created) {
+          console.warn(
+            `Agent "${agent.name}": created ${created} with default secret exclusions because buildContextPath is ` +
+              `set (the entire context is sent to Docker/CodeBuild). Review and commit it; edit to include any ` +
+              `intentionally-bundled files.`
+          );
+        }
       }
     }
   }
