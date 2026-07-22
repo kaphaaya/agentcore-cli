@@ -1,5 +1,6 @@
 import { ConfigIO, SecureCredentials, toError } from '../../../lib';
-import { AwsCredentialsError, UserCancellationError } from '../../../lib/errors/types';
+import type { DependencySyncResult } from '../../../lib/dependency-management';
+import { AwsCredentialsError, DependencySyncError, UserCancellationError } from '../../../lib/errors/types';
 import type { DeployedState } from '../../../schema';
 import { applyTargetRegionToEnv } from '../../aws';
 import { validateAwsCredentials } from '../../aws/account';
@@ -9,11 +10,14 @@ import type { ExecLogger } from '../../logging';
 import {
   type MissingCredential,
   type PreflightContext,
+  SYNC_CDK_DEPENDENCIES_STEP,
   bootstrapEnvironment,
   buildCdkProject,
   checkBootstrapNeeded,
   checkDependencyVersions,
   checkStackDeployability,
+  ensureManagedDependencies,
+  failedSyncResult,
   formatError,
   getAllCredentials,
   hasIdentityApiProviders,
@@ -21,6 +25,7 @@ import {
   setupApiKeyProviders,
   setupOAuth2Providers,
   synthesizeCdk,
+  teardownSyncFailureResult,
   validateProject,
 } from '../../operations/deploy';
 import {
@@ -142,6 +147,12 @@ export interface PreflightOptions {
   isInteractive?: boolean;
   /** Skip identity provider check (for plan command which only synthesizes) */
   skipIdentityCheck?: boolean;
+  /**
+   * Preview mode (diff): the managed-dependency sync runs check-only, computing the plan and a
+   * future-tense notice without writing package.json or running npm install. Previews must never
+   * mutate the working tree.
+   */
+  dependencySyncCheckOnly?: boolean;
 }
 
 export interface PreflightResult {
@@ -162,6 +173,8 @@ export interface PreflightResult {
   missingCredentials: MissingCredential[];
   /** KMS key ARN used for identity token vault encryption */
   identityKmsKeyArn?: string;
+  /** Result of the managed dependency sync — notice/warnings for display, attrs for telemetry */
+  dependencySyncResult: DependencySyncResult | null;
   /** Credential ARNs (API key + OAuth) from pre-deploy setup */
   allCredentials: Record<string, { credentialProviderArn: string; clientSecretArn?: string; callbackUrl?: string }>;
   startPreflight: () => Promise<void>;
@@ -184,13 +197,15 @@ export interface PreflightResult {
 // Step indices for base preflight steps (always present)
 const STEP_VALIDATE = 0;
 const STEP_DEPS = 1;
-const STEP_BUILD = 2;
-// Note: Identity steps are inserted at index 3+ when needed, shifting synth and stack status down.
+const STEP_SYNC_DEPS = 2;
+const STEP_BUILD = 3;
+// Note: Identity steps are inserted at index 4+ when needed, shifting synth and stack status down.
 // Use findStepIndex() to locate synth and stack status dynamically.
 
 const BASE_PREFLIGHT_STEPS: Step[] = [
   { label: 'Validate project', status: 'pending' },
   { label: 'Check dependencies', status: 'pending' },
+  { label: SYNC_CDK_DEPENDENCIES_STEP, status: 'pending' },
   { label: 'Build CDK project', status: 'pending' },
   { label: 'Synthesize CloudFormation', status: 'pending' },
   { label: 'Check stack status', status: 'pending' },
@@ -205,7 +220,7 @@ const IDENTITY_STEP: Step = { label: LABEL_API_KEY, status: 'pending' };
 const BOOTSTRAP_STEP: Step = { label: 'Bootstrap AWS environment', status: 'pending' };
 
 export function useCdkPreflight(options: PreflightOptions): PreflightResult {
-  const { logger, isInteractive = false, skipIdentityCheck = false } = options;
+  const { logger, isInteractive = false, skipIdentityCheck = false, dependencySyncCheckOnly = false } = options;
 
   // Create switchable ioHost - starts silent, can be flipped to verbose for deploy
   const switchableIoHost = useMemo(() => createSwitchableIoHost(), []);
@@ -226,6 +241,7 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
     Record<string, { credentialProviderArn: string; clientSecretArn?: string; callbackUrl?: string }>
   >({});
   const [teardownConfirmed, setTeardownConfirmed] = useState(false);
+  const [dependencySyncResult, setDependencySyncResult] = useState<DependencySyncResult | null>(null);
   const lastErrorRef = useRef<Error | undefined>(undefined);
 
   // Guard against concurrent runs (React StrictMode, re-renders, etc.)
@@ -282,6 +298,9 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
     setBootstrapContext(null);
     setHasTokenExpiredError(false); // Reset token expired state when retrying
     setHasCredentialsError(false); // Reset credentials error state when retrying
+    // Reset the previous run's dep-sync result so a retry doesn't render stale
+    // notices/warnings or attach stale dep_sync_* attrs to the new run's telemetry.
+    setDependencySyncResult(null);
     setPhase('running');
   }, [disposeWrapper, restoreRegionEnv]);
 
@@ -485,6 +504,51 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
           return;
         }
 
+        // Step: Sync managed dependencies — pin agentcore/cdk/package.json to the versions
+        // this CLI was tested with, migrating pre-pinning (caret) projects. Runs before the build so
+        // the compile sees the reinstalled tree. Diff mode runs check-only (never mutates the
+        // working tree), and teardown deploys downgrade every sync failure to a warning: skew via
+        // treatSkewAsWarning, write/install failures (DependencySyncError) via the catch below.
+        // Nothing about pinning may block destroying a cost-incurring stack.
+        updateStep(STEP_SYNC_DEPS, { status: 'running' });
+        logger.startStep(SYNC_CDK_DEPENDENCIES_STEP);
+        try {
+          const syncResult = await ensureManagedDependencies(preflightContext.cdkProject, {
+            checkOnly: dependencySyncCheckOnly,
+            treatSkewAsWarning: preflightContext.isTeardownDeploy,
+          });
+          for (const warning of syncResult.warnings) {
+            logger.log(warning, 'warn');
+          }
+          if (syncResult.notice) {
+            logger.log(syncResult.notice);
+          }
+          setDependencySyncResult(syncResult);
+          logger.endStep('success');
+          updateStep(STEP_SYNC_DEPS, { status: 'success' });
+        } catch (err) {
+          if (preflightContext.isTeardownDeploy && err instanceof DependencySyncError) {
+            // Surface through the same warning channels as a downgraded skew: the deploy-flow
+            // screens render dependencySyncResult.warnings, and the step shows the warning inline.
+            const downgraded = teardownSyncFailureResult(err);
+            const warning = downgraded.warnings[0]!;
+            logger.log(warning, 'warn');
+            setDependencySyncResult(downgraded);
+            // No message: the logger.log above already wrote the warning line.
+            logger.endStep('warn');
+            updateStep(STEP_SYNC_DEPS, { status: 'warn', warn: warning });
+          } else {
+            const errorMsg = formatError(err);
+            logger.endStep('error', errorMsg);
+            updateStep(STEP_SYNC_DEPS, { status: 'error', error: getErrorMessage(err) });
+            // The sync itself is the failure: attach a minimal 'failed' result so
+            // useDeployFlow's failure telemetry still carries dep_sync_* attrs.
+            setDependencySyncResult(failedSyncResult());
+            failPreflight(err);
+            return;
+          }
+        }
+
         // Step: Build CDK project
         updateStep(STEP_BUILD, { status: 'running' });
         logger.startStep('Build CDK project');
@@ -632,7 +696,16 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
     return () => {
       process.off('unhandledRejection', handleUnhandledRejection);
     };
-  }, [phase, logger, switchableIoHost, isInteractive, skipIdentityCheck, teardownConfirmed, restoreRegionEnv]);
+  }, [
+    phase,
+    logger,
+    switchableIoHost,
+    isInteractive,
+    skipIdentityCheck,
+    dependencySyncCheckOnly,
+    teardownConfirmed,
+    restoreRegionEnv,
+  ]);
 
   // Handle identity-setup phase (after user provides credentials)
   useEffect(() => {
@@ -1047,6 +1120,7 @@ export function useCdkPreflight(options: PreflightOptions): PreflightResult {
     lastError: lastErrorRef.current,
     missingCredentials,
     identityKmsKeyArn,
+    dependencySyncResult,
     allCredentials,
     startPreflight,
     confirmTeardown,
