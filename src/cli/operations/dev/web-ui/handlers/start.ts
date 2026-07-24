@@ -1,3 +1,5 @@
+import { requiresExactDevPort } from '../../config';
+import { A2A_DEFAULT_PORT, MCP_DEFAULT_PORT } from '../../constants';
 import { type DevServerCallbacks, createDevServer, findAvailablePort } from '../../server';
 import { waitForServerReady } from '../../utils';
 import type { RouteContext } from './route-context';
@@ -73,7 +75,8 @@ export async function handleStart(
 /**
  * Resolve the target port a web-UI-served agent should bind to.
  *
- * - A2A/MCP agents use their framework-fixed ports (9000 / 8000).
+ * - A2A agents use 9000 + runtime index so multiple agents can run together.
+ * - MCP agents use their framework-fixed port (8000).
  * - When `-p`/`--port` was set explicitly (`agentBasePort !== undefined`), the
  *   *selected* runtime is honored literally (binds exactly `agentBasePort`, no
  *   offset). All other runtimes fall back to the default `uiPort + 1 + index`
@@ -90,12 +93,12 @@ export function resolveAgentTargetPort(args: {
   selectedAgent?: string;
 }): number {
   const { protocol, agentName, agentIndex, uiPort, agentBasePort, selectedAgent } = args;
-  if (protocol === 'A2A') return 9000;
-  if (protocol === 'MCP') return 8000;
   const safeIndex = agentIndex >= 0 ? agentIndex : 0;
+  if (protocol === 'MCP') return MCP_DEFAULT_PORT;
   if (agentBasePort !== undefined && agentName === selectedAgent) {
     return agentBasePort;
   }
+  if (protocol === 'A2A') return A2A_DEFAULT_PORT + safeIndex;
   return uiPort + 1 + safeIndex;
 }
 
@@ -117,17 +120,11 @@ async function doStartAgent(
     return { success: false, name: agentName, port: 0, error: `Agent "${agentName}" not found or not supported` };
   }
 
-  const agentIndex = ctx.options.agents.findIndex(a => a.name === agentName);
+  const filteredAgentIndex = ctx.options.agents.findIndex(a => a.name === agentName);
+  const agentIndex = ctx.options.agents[filteredAgentIndex]?.runtimeIndex ?? filteredAgentIndex;
   const { onLog } = ctx.options;
 
-  // Several frameworks bind to a fixed port that ignores the PORT env var:
-  //  - A2A: serve_a2a() accepts port as a function parameter, not from env → 9000
-  //  - MCP (FastMCP): pydantic BaseSettings init kwarg overrides env → 8000
-  // TS HTTP agents read PORT env var so we can assign any available port.
-  // For Python HTTP agents, uvicorn takes --port as a CLI arg so we can assign any port.
   const isA2A = config.protocol === 'A2A';
-  const isMCP = config.protocol === 'MCP';
-  const fixedPort = isA2A ? 9000 : isMCP ? 8000 : undefined;
   const isTsHttp = !config.isPython && config.protocol === 'HTTP';
   const targetPort = resolveAgentTargetPort({
     protocol: config.protocol,
@@ -141,13 +138,15 @@ async function doStartAgent(
   // fail fast instead of silently rebinding (the silent-shift behavior #1079 removes).
   const portIsExplicit = ctx.options.agentBasePort !== undefined && agentName === ctx.options.selectedAgent;
   const agentPort = await findAvailablePort(targetPort);
-  if (fixedPort && agentPort !== fixedPort) {
-    const reason = isA2A ? 'A2A agents require port 9000.' : 'MCP agents require port 8000 (FastMCP default).';
+  if (requiresExactDevPort(config.protocol) && agentPort !== targetPort) {
     return {
       success: false,
       name: agentName,
       port: 0,
-      error: `Port ${fixedPort} is in use. ${reason}`,
+      error:
+        config.protocol === 'MCP'
+          ? `Port ${targetPort} is in use. MCP agents require port ${targetPort} (FastMCP default).`
+          : `Port ${targetPort} is in use. A2A agents require port ${targetPort}.`,
     };
   }
   if (portIsExplicit && agentPort !== targetPort) {
@@ -195,6 +194,7 @@ async function doStartAgent(
   const agentEnvVars = {
     ...baseEnvVars,
     OTEL_SERVICE_NAME: agentName,
+    ...(isA2A ? { AGENTCORE_RUNTIME_URL: `http://localhost:${agentPort}/` } : {}),
     ...(isTsHttp ? { PORT: String(agentPort) } : {}),
   };
 

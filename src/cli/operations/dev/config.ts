@@ -1,5 +1,6 @@
 import { ConfigIO, findConfigRoot } from '../../../lib';
 import type { AgentCoreProjectSpec, AgentEnvSpec, BuildType, ProtocolMode } from '../../../schema';
+import { A2A_DEFAULT_PORT, MCP_DEFAULT_PORT } from './constants';
 import { dirname, isAbsolute, join } from 'node:path';
 
 export interface DevConfig {
@@ -70,6 +71,14 @@ export function getDevSupportedAgents(project: AgentCoreProjectSpec | null): Age
 }
 
 /**
+ * A2A invocation derives the port from project configuration, while FastMCP
+ * ignores port overrides. Neither protocol can safely move to a fallback port.
+ */
+export function requiresExactDevPort(protocol: ProtocolMode): boolean {
+  return protocol === 'A2A' || protocol === 'MCP';
+}
+
+/**
  * Resolve the port for a specific agent.
  *
  * - When the user supplied `-p`/`--port` explicitly (`explicit === true`), the
@@ -88,6 +97,27 @@ export function getAgentPort(
   if (explicit || !project) return basePort;
   const index = project.runtimes.findIndex(a => a.name === agentName);
   return index >= 0 ? basePort + index : basePort;
+}
+
+/**
+ * Resolve the local development port for an agent.
+ *
+ * A2A starts at its framework default and offsets by runtime index so multiple
+ * agents can run together. MCP remains fixed because FastMCP currently ignores
+ * the port environment variable. Explicit ports are honored for all other
+ * protocols.
+ */
+export function getDevPort(
+  project: AgentCoreProjectSpec | null,
+  agentName: string,
+  protocol: ProtocolMode,
+  basePort: number,
+  explicit = false
+): number {
+  if (protocol === 'MCP') return MCP_DEFAULT_PORT;
+  if (explicit) return basePort;
+  const protocolBasePort = protocol === 'A2A' ? A2A_DEFAULT_PORT : basePort;
+  return getAgentPort(project, agentName, protocolBasePort);
 }
 
 /**
