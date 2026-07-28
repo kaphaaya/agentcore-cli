@@ -19,6 +19,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { argv } from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 // Command grouping (arranged properly, per the request). Mirrors the sections
 // in agentcore-cli/docs/commands.md. Any command discovered from the binary but
@@ -84,11 +85,30 @@ function help(args) {
   }
 }
 
+const PARAMETER_DESCRIPTION_OVERRIDES = new Map([
+  ['bedrock, open_ai, or gemini', 'The model provider. Valid values: `bedrock`, `open_ai`, or `gemini`.'],
+  [
+    'Override LiteLLM API base URL (harness only, lite_llm) [non-interactive]',
+    'The LiteLLM API base URL override for harness invocations. ' +
+      'Available only with `lite_llm` in non-interactive mode.',
+  ],
+  [
+    'Override LiteLLM additional params as a JSON object (harness only, lite_llm) [non-interactive]',
+    'The additional LiteLLM parameters, as a JSON object, for harness invocations. ' +
+      'Available only with `lite_llm` in non-interactive mode.',
+  ],
+]);
+
+export function normalizeParameterDescription(description) {
+  return PARAMETER_DESCRIPTION_OVERRIDES.get(description) || description;
+}
+
 // Parse a Commander.js help blob into { summary, signature, params, options }.
-function parseHelp(text, name) {
+export function parseHelp(text) {
   const lines = text.split('\n');
   const out = { summary: '', signature: '', args: [], options: [] };
   let section = 'head';
+  let currentItem = null;
   const descLines = [];
 
   for (const raw of lines) {
@@ -96,18 +116,22 @@ function parseHelp(text, name) {
     if (/^Usage:/.test(line)) {
       out.signature = line.replace(/^Usage:\s*/, '').trim();
       section = 'desc';
+      currentItem = null;
       continue;
     }
     if (/^Arguments:/.test(line)) {
       section = 'args';
+      currentItem = null;
       continue;
     }
     if (/^Options:/.test(line)) {
       section = 'options';
+      currentItem = null;
       continue;
     }
     if (/^Commands:/.test(line)) {
       section = 'commands';
+      currentItem = null;
       continue;
     }
 
@@ -115,10 +139,22 @@ function parseHelp(text, name) {
       if (line.trim()) descLines.push(line.trim());
     } else if (section === 'args') {
       const m = line.match(/^\s+(\S+)\s{2,}(.*)$/);
-      if (m) out.args.push({ name: m[1], type: null, required: true, description: m[2].trim() });
+      if (m) {
+        currentItem = { name: m[1], type: null, required: true, description: m[2].trim() };
+        out.args.push(currentItem);
+      } else if (currentItem && /^\s+\S/.test(line)) {
+        currentItem.description += ` ${line.trim()}`;
+      }
     } else if (section === 'options') {
       const m = line.match(/^\s+(-[^\s].*?)\s{2,}(.*)$/);
-      if (m) out.options.push({ name: m[1].trim(), type: null, required: false, description: m[2].trim() });
+      if (m) {
+        currentItem = { name: m[1].trim(), type: null, required: false, description: m[2].trim() };
+        out.options.push(currentItem);
+      } else if (currentItem && /^\s+\S/.test(line)) {
+        currentItem.description += ` ${line.trim()}`;
+      } else if (line.trim()) {
+        currentItem = null;
+      }
     }
   }
   out.summary = descLines.join(' ');
@@ -138,7 +174,7 @@ function entryForCommand(name) {
         `not a real CLI command (phantom/renamed). Remove it from GROUPS or fix the name.`
     );
   }
-  const parsed = parseHelp(raw, name);
+  const parsed = parseHelp(raw);
   // subcommands (e.g. `add agent`, `remove tool`) show under "Commands:"—
   // we surface the top-level command; nested ones can be expanded later.
   return {
@@ -150,7 +186,10 @@ function entryForCommand(name) {
     // reuse params for both positional args and flags, flagged by required.
     // The renderer already wraps param names in backticks, so don't add our
     // own (that produced double-backticks). Drop the ubiquitous help flag.
-    params: [...parsed.args, ...parsed.options.filter(o => !/^-h,?\s|--help\b/.test(o.name))],
+    params: [...parsed.args, ...parsed.options.filter(o => !/^-h,?\s|--help\b/.test(o.name))].map(param => ({
+      ...param,
+      description: normalizeParameterDescription(param.description),
+    })),
     returns: null,
     raises: [],
     examples: [],
@@ -225,4 +264,6 @@ function main() {
   process.stderr.write(`Wrote doc-model: ${groups.length} groups, version ${version}\n`);
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
