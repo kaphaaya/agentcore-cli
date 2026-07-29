@@ -153,6 +153,7 @@ export interface AddHarnessOptions {
   /** Harness-level tags, merged with project tags (CFN Tags). */
   tags?: Record<string, string>;
   withInvokeScript?: boolean;
+  dockerfileBaseDir?: string;
   selectedTools?: string[];
   mcpName?: string;
   mcpUrl?: string;
@@ -224,9 +225,10 @@ export class HarnessPrimitive extends BasePrimitive<AddHarnessOptions, Removable
       let dockerfile: string | undefined;
       if (options.dockerfilePath) {
         const projectRoot = dirname(configBaseDir);
+        const dockerfileBaseDir = options.dockerfileBaseDir ?? projectRoot;
         const srcPath = isAbsolute(options.dockerfilePath)
           ? options.dockerfilePath
-          : resolve(projectRoot, options.dockerfilePath);
+          : resolve(dockerfileBaseDir, options.dockerfilePath);
         try {
           await access(srcPath);
         } catch {
