@@ -1,7 +1,12 @@
 import { getErrorMessage } from '../../../errors';
 import { isTerminal } from '../../../operations/jobs';
 import type { ABTestJobRecord, DebugCheckResult, JobEngine } from '../../../operations/jobs';
-import { getInvocationUrl } from '../../../operations/jobs/ab-test/format';
+import {
+  INVOCATION_PATH_HINT,
+  getGatewayBaseUrl,
+  getInvocationUrl,
+  getInvocationUrlCandidates,
+} from '../../../operations/jobs/ab-test/format';
 import { Panel } from '../../components';
 import { lifecycleColor, statusColor } from './helpers';
 import { Box, Text, useInput } from 'ink';
@@ -98,6 +103,8 @@ export function ABTestDetailView({
   });
 
   const invocationUrl = getInvocationUrl(record);
+  const invocationUrlCandidates = invocationUrl ? [] : getInvocationUrlCandidates(record);
+  const gatewayBaseUrl = !invocationUrl && !invocationUrlCandidates.length ? getGatewayBaseUrl(record) : undefined;
   const metrics = record.results?.evaluatorMetrics;
 
   const keyHints = [
@@ -133,6 +140,25 @@ export function ABTestDetailView({
           <Text>
             <Text bold>Invocation URL:</Text> {invocationUrl}
           </Text>
+        )}
+        {invocationUrlCandidates.length > 0 && (
+          <>
+            <Text bold>Invocation URLs (pick the target to send traffic to):</Text>
+            {invocationUrlCandidates.map(url => (
+              <Text key={url}> {url}</Text>
+            ))}
+          </>
+        )}
+        {gatewayBaseUrl && (
+          <>
+            <Text>
+              <Text bold>Gateway URL:</Text> {gatewayBaseUrl}
+            </Text>
+            <Text dimColor>
+              {'  → '}
+              {INVOCATION_PATH_HINT}
+            </Text>
+          </>
         )}
         {record.createdAt && (
           <Text>

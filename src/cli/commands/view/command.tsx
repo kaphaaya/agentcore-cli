@@ -1,7 +1,14 @@
 import { ConfigIO, JobNotFoundError, serializeResult } from '../../../lib';
 import { createJobEngine } from '../../operations/jobs';
 import type { ABTestJobRecord, JobType } from '../../operations/jobs';
-import { getInvocationUrl, printABTestDetail, printABTestHistory } from '../../operations/jobs/ab-test/format';
+import {
+  INVOCATION_PATH_HINT,
+  getGatewayBaseUrl,
+  getInvocationUrl,
+  getInvocationUrlCandidates,
+  printABTestDetail,
+  printABTestHistory,
+} from '../../operations/jobs/ab-test/format';
 import { printBatchEvaluationDetail, printBatchEvaluationHistory } from '../../operations/jobs/batch-evaluation/format';
 import { printInsightsDetail, printInsightsHistory } from '../../operations/jobs/insights/format';
 import { printRecommendationDetail, printRecommendationHistory } from '../../operations/jobs/recommendation/format';
@@ -44,6 +51,23 @@ const TYPE_META: Record<
   },
 };
 
+/**
+ * URL fields for `view ab-test --json`.
+ *
+ * When exactly one gateway target is known (target-based control, or a config-bundle runtime that
+ * resolved to a single target), emit the complete `invocationUrl`. When several targets front the
+ * runtime, emit `invocationUrlCandidates` so the consumer can choose. When none is known, emit
+ * `gatewayUrl` + `invocationUrlHint` so the path can be built by hand. The runtime name is never used
+ * as the path — that was the #1854 bug.
+ */
+function abTestUrlFields(record: ABTestJobRecord): Record<string, string | string[] | undefined> {
+  const url = getInvocationUrl(record);
+  if (url) return { invocationUrl: url };
+  const candidates = getInvocationUrlCandidates(record);
+  if (candidates.length) return { invocationUrlCandidates: candidates };
+  return { gatewayUrl: getGatewayBaseUrl(record), invocationUrlHint: INVOCATION_PATH_HINT };
+}
+
 function registerViewSubcommand(viewCmd: Command, type: JobType) {
   const meta = TYPE_META[type];
 
@@ -65,8 +89,7 @@ function registerViewSubcommand(viewCmd: Command, type: JobType) {
             if (!record) {
               throw new JobNotFoundError(`${meta.label} "${id}" not found.`);
             }
-            const extra =
-              type === 'ab-test' ? { invocationUrl: getInvocationUrl(record as unknown as ABTestJobRecord) } : {};
+            const extra = type === 'ab-test' ? abTestUrlFields(record as unknown as ABTestJobRecord) : {};
             console.log(JSON.stringify(serializeResult({ success: true, ...record, ...extra })));
             return { job_type: type };
           });

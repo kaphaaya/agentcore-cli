@@ -115,14 +115,25 @@ Promote does not deploy — review the change and run `agentcore deploy` to roll
 
 ## Invocation URL
 
-`view ab-test <id>` shows an **Invocation URL** derived from the test's gateway. Send traffic there and the gateway
-splits it between the variants per the configured weights:
+`view ab-test <id>` shows a URL derived from the test's gateway. Send traffic there and the gateway splits it between
+the variants per the configured weights:
 
 ```
-https://<gatewayId>.gateway.bedrock-agentcore.<region>.amazonaws.com/<target-or-agent>/invocations
+https://<gatewayId>.gateway.bedrock-agentcore.<region>.amazonaws.com/<gateway-target>/invocations
 ```
 
-(target-based uses the control target's path; config-bundle uses the agent name.)
+The path segment is always a **gateway target** name — never a runtime name. Config-bundle tests carry no target of
+their own (their variants are configuration bundles), so the CLI resolves the gateway target(s) fronting the `--runtime`
+under test when the test is created:
+
+- **one matching target** (the common case, including target-based tests) — a complete **Invocation URL**.
+- **several matching targets** (e.g. a canary beside prod) — one **Invocation URL** per target; pick the one to send
+  traffic to.
+- **no matching target** — the **Gateway URL** only; append `/<gateway-target>/invocations` yourself, using
+  `agentcore status --json` to list the gateway's targets.
+
+With `--json` the field mirrors these cases: `invocationUrl` (single), `invocationUrlCandidates` (several), or
+`gatewayUrl` + `invocationUrlHint` (none).
 
 ## Results
 

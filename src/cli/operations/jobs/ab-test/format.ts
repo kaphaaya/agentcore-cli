@@ -3,23 +3,55 @@ import { dnsSuffix } from '../../../aws/partition';
 import { formatJobDate } from '../shared/format';
 import type { ABTestJobRecord } from '../shared/types';
 
-/**
- * Derive the gateway invocation URL from the stored gateway ARN.
- * Target-based: `https://{gateway}/{control-target-name}/invocations`.
- * Config-bundle: `https://{gateway}/{agent-name}/invocations`.
- */
-export function getInvocationUrl(record: ABTestJobRecord): string | undefined {
+/** Gateway base URL (no path) from the stored gateway ARN, or undefined if the ARN can't be parsed. */
+function gatewayBaseUrl(record: ABTestJobRecord): string | undefined {
   const parts = record.gatewayArn.split(':');
   const region = parts[3];
   const gatewayId = parts[5]?.split('/')[1];
   if (!region || !gatewayId) return undefined;
-  const baseUrl = `https://${gatewayId}.gateway.bedrock-agentcore.${region}.${dnsSuffix(region)}`;
-  if (record.mode === 'target-based') {
-    const targetName = record.variants[0]?.targetName;
-    return targetName ? `${baseUrl}/${targetName}/invocations` : undefined;
-  }
-  return record.agent ? `${baseUrl}/${record.agent}/invocations` : undefined;
+  return `https://${gatewayId}.gateway.bedrock-agentcore.${region}.${dnsSuffix(region)}`;
 }
+
+/** The gateway target name that uniquely identifies this test's invocation path, if there is exactly one. */
+function uniqueTargetName(record: ABTestJobRecord): string | undefined {
+  // Target-based: the control variant's target. Config-bundle: the target resolved at create time,
+  // set only when exactly one gateway target routed to the runtime.
+  return record.mode === 'target-based' ? record.variants[0]?.targetName : record.targetName;
+}
+
+/**
+ * Derive the complete invocation URL: `https://{gateway}/{target}/invocations`.
+ *
+ * The path segment must be a gateway TARGET name. Config-bundle records store the target resolved from
+ * the runtime at create time (`targetName`); target-based records carry it on the control variant.
+ * Returns undefined when no single target is known — either the gateway has none fronting the runtime,
+ * or several do (see getInvocationUrlCandidates). Substituting the runtime name here produced URLs that
+ * 404'd with "No Target found for Target name: <runtime>" (issue #1854), so it is deliberately not done.
+ */
+export function getInvocationUrl(record: ABTestJobRecord): string | undefined {
+  const baseUrl = gatewayBaseUrl(record);
+  const targetName = uniqueTargetName(record);
+  return baseUrl && targetName ? `${baseUrl}/${targetName}/invocations` : undefined;
+}
+
+/**
+ * Candidate invocation URLs when several gateway targets route to the runtime (config-bundle only).
+ * Each is a valid path; only the user can say which should receive traffic. Empty when a single URL
+ * was resolvable (use getInvocationUrl) or when no target matched.
+ */
+export function getInvocationUrlCandidates(record: ABTestJobRecord): string[] {
+  const baseUrl = gatewayBaseUrl(record);
+  if (!baseUrl || !record.targetCandidates?.length) return [];
+  return record.targetCandidates.map(t => `${baseUrl}/${t}/invocations`);
+}
+
+/** Gateway base URL to show when no invocation path could be determined, so the user can build one. */
+export function getGatewayBaseUrl(record: ABTestJobRecord): string | undefined {
+  return gatewayBaseUrl(record);
+}
+
+/** Names what the caller must append to a gateway base URL to reach a variant. */
+export const INVOCATION_PATH_HINT = 'append /<gateway-target>/invocations (see `agentcore status --json`)';
 
 export function printABTestHistory(records: ABTestJobRecord[]): void {
   if (records.length === 0) {
@@ -47,7 +79,19 @@ export function printABTestDetail(record: ABTestJobRecord): void {
   console.log(`Gateway: ${record.gatewayArn}`);
   console.log(`Gateway filter: ${record.gatewayFilter?.targetPaths?.[0] ?? 'none'}`);
   const invocationUrl = getInvocationUrl(record);
-  if (invocationUrl) console.log(`Invocation URL: ${invocationUrl}`);
+  const candidates = getInvocationUrlCandidates(record);
+  if (invocationUrl) {
+    console.log(`Invocation URL: ${invocationUrl}`);
+  } else if (candidates.length) {
+    console.log('Invocation URLs (one per matching gateway target — pick the one to send traffic to):');
+    for (const url of candidates) console.log(`  ${url}`);
+  } else {
+    const baseUrl = getGatewayBaseUrl(record);
+    if (baseUrl) {
+      console.log(`Gateway URL: ${baseUrl}`);
+      console.log(`  → ${INVOCATION_PATH_HINT}`);
+    }
+  }
   console.log(`Started: ${formatJobDate(record.createdAt)}`);
   if (record.completedAt) console.log(`Stopped: ${formatJobDate(record.completedAt)}`);
   if (record.maxDurationExpiresAt) console.log(`Max duration expires: ${formatJobDate(record.maxDurationExpiresAt)}`);
