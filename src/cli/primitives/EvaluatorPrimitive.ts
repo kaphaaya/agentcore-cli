@@ -6,7 +6,7 @@ import { getErrorMessage } from '../errors';
 import type { RemovalPreview, SchemaChange } from '../operations/remove/types';
 import { runCliCommand } from '../telemetry/cli-command-run.js';
 import { EvaluatorLevel, EvaluatorType, standardize } from '../telemetry/schemas/common-shapes.js';
-import { renderCodeBasedEvaluatorTemplate } from '../templates/EvaluatorRenderer';
+import { renderCodeBasedEvaluatorTemplate, renderThirdPartyEvaluatorTemplate } from '../templates/EvaluatorRenderer';
 import { requireTTY } from '../tui/guards/tty';
 import {
   LEVEL_PLACEHOLDERS,
@@ -17,9 +17,99 @@ import {
 import { BasePrimitive } from './BasePrimitive';
 import type { AddResult, AddScreenComponent, RemovableResource } from './types';
 import type { Command } from '@commander-js/extra-typings';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+
+// ============================================================================
+// Third-Party Library Registry
+// ============================================================================
+
+interface MetricWarning {
+  metrics: Set<string>;
+  message: string;
+}
+
+export interface ThirdPartyLibraryConfig {
+  templateDir: string;
+  defaultTimeoutSeconds: number;
+  warnings: MetricWarning[];
+}
+
+export const THIRD_PARTY_EVALUATOR_LIBRARIES = {
+  deepeval: {
+    templateDir: 'deepeval-lambda',
+    defaultTimeoutSeconds: 300,
+    warnings: [
+      {
+        metrics: new Set([
+          'FaithfulnessMetric',
+          'HallucinationMetric',
+          'ContextualRelevancyMetric',
+          'ContextualPrecisionMetric',
+          'ContextualRecallMetric',
+        ]),
+        message:
+          'requires retrieval_context from tool-role messages. ' +
+          'If your agent has no tool calls, the evaluator will return MISSING_REQUIRED_FIELD at runtime.',
+      },
+      {
+        metrics: new Set(['ContextualPrecisionMetric', 'ContextualRecallMetric']),
+        message:
+          'requires expected_output via evaluationReferenceInputs. ' +
+          'Caller must provide referenceInputs when invoking the Evaluate API.',
+      },
+    ],
+  },
+  autoevals: {
+    templateDir: 'autoevals-lambda',
+    defaultTimeoutSeconds: 60,
+    warnings: [
+      {
+        metrics: new Set(['Factuality', 'ClosedQA']),
+        message:
+          'requires expected_output via evaluationReferenceInputs. ' +
+          'Caller must provide referenceInputs when invoking the Evaluate API.',
+      },
+      {
+        metrics: new Set(['SQL']),
+        message:
+          'requires expected_output (reference SQL) via evaluationReferenceInputs. ' +
+          'Caller must provide referenceInputs when invoking the Evaluate API.',
+      },
+    ],
+  },
+} satisfies Record<string, ThirdPartyLibraryConfig>;
+
+export type ThirdPartyLibrary = keyof typeof THIRD_PARTY_EVALUATOR_LIBRARIES;
+
+const SUPPORTED_LIBRARIES: ThirdPartyLibrary[] = Object.keys(THIRD_PARTY_EVALUATOR_LIBRARIES) as ThirdPartyLibrary[];
+
+function isSupportedLibrary(value: string): value is ThirdPartyLibrary {
+  return Object.prototype.hasOwnProperty.call(THIRD_PARTY_EVALUATOR_LIBRARIES, value);
+}
+
+export const MODEL_PROVIDERS = ['openai', 'bedrock'] as const;
+
+export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
+
+function isSupportedModelProvider(value: string): value is ModelProvider {
+  return (MODEL_PROVIDERS as readonly string[]).includes(value);
+}
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface ThirdPartyLibraryOptions {
+  library: ThirdPartyLibrary;
+  metricClass: string;
+  metricParams?: string;
+  /** LLM judge provider; defaults to the library's built-in default (OpenAI). */
+  modelProvider?: ModelProvider;
+  /** Bedrock model ID (required when modelProvider is 'bedrock'). */
+  model?: string;
+}
 
 export interface AddEvaluatorOptions {
   name: string;
@@ -27,12 +117,60 @@ export interface AddEvaluatorOptions {
   description?: string;
   config: EvaluatorConfig;
   kmsKeyArn?: string;
+  thirdParty?: ThirdPartyLibraryOptions;
 }
 
 export type RemovableEvaluator = RemovableResource;
 
+// ============================================================================
+// Constants & Utilities
+// ============================================================================
+
 const DEFAULT_CODE_ENTRYPOINT = 'lambda_function.handler';
 const DEFAULT_CODE_TIMEOUT = 60;
+
+export function jsonToPythonValue(value: unknown): string {
+  if (value === null) return 'None';
+  if (value === true) return 'True';
+  if (value === false) return 'False';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(jsonToPythonValue).join(', ')}]`;
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}: ${jsonToPythonValue(v)}`).join(', ')}}`;
+  }
+  return String(value as string | number | boolean);
+}
+
+export function jsonToKwargs(json: string): string {
+  const obj: unknown = JSON.parse(json);
+  if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('Expected a JSON object of keyword arguments');
+  }
+  return Object.entries(obj as Record<string, unknown>)
+    .map(([key, value]) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        throw new Error(`Invalid Python kwarg name "${key}"`);
+      }
+      return `${key}=${jsonToPythonValue(value)}`;
+    })
+    .join(', ');
+}
+
+function getWarningsForMetric(libraryConfig: ThirdPartyLibraryConfig, metricClass: string): string[] {
+  const messages: string[] = [];
+  for (const warning of libraryConfig.warnings) {
+    if (warning.metrics.has(metricClass)) {
+      messages.push(`⚠️ ${metricClass} ${warning.message}`);
+    }
+  }
+  return messages;
+}
+
+// ============================================================================
+// EvaluatorPrimitive
+// ============================================================================
 
 /**
  * EvaluatorPrimitive handles all evaluator add/remove operations.
@@ -53,7 +191,24 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
         const projectRoot = dirname(configRoot);
         const codeLocation = options.config.codeBased.managed.codeLocation;
         const targetDir = join(projectRoot, codeLocation);
-        await renderCodeBasedEvaluatorTemplate(options.name, targetDir);
+
+        if (options.thirdParty) {
+          const libraryConfig = THIRD_PARTY_EVALUATOR_LIBRARIES[options.thirdParty.library];
+          await renderThirdPartyEvaluatorTemplate(
+            libraryConfig.templateDir,
+            {
+              Name: options.name,
+              EvaluatorClass: options.thirdParty.metricClass,
+              EvaluatorParams: options.thirdParty.metricParams ?? '',
+              // Omitted for the default (openai) so Handlebars treats it as falsy.
+              ...(options.thirdParty.modelProvider === 'bedrock' && { ModelProviderBedrock: true }),
+              ...(options.thirdParty.model && { Model: options.thirdParty.model }),
+            },
+            targetDir
+          );
+        } else {
+          await renderCodeBasedEvaluatorTemplate(options.name, targetDir);
+        }
         return { success: true, evaluatorName: evaluator.name, codePath: codeLocation };
       }
 
@@ -176,7 +331,10 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
       .option('--name <name>', 'Evaluator name')
       .option('--level <level>', 'Evaluation level: SESSION, TRACE, TOOL_CALL')
       .option('--type <type>', 'Evaluator type: llm-as-a-judge (default) or code-based')
-      .option('--model <model>', '[LLM] Bedrock model ID for LLM-as-a-Judge')
+      .option(
+        '--model <model>',
+        '[LLM] Bedrock inference profile ID for LLM-as-a-Judge (e.g. us.anthropic.claude-sonnet-4-20250514-v1:0)'
+      )
       .option(
         '--instructions <text>',
         '[LLM] Evaluation prompt instructions (must include level-appropriate placeholders, e.g. {context})'
@@ -184,6 +342,14 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
       .option('--rating-scale <preset>', `[LLM] Rating scale preset: ${presetIds.join(', ')} (default: 1-5-quality)`)
       .option('--lambda-arn <arn>', '[Code-based] Existing Lambda function ARN (external)')
       .option('--timeout <seconds>', '[Code-based] Lambda timeout in seconds, 1-300 (default: 60)')
+      .option(
+        '--3p-template-json <json>',
+        '[Code-based] Inline JSON with 3P library config: {"library", "metric", "modelProvider", "model", "params"}'
+      )
+      .option(
+        '--3p-template-json-file <path>',
+        '[Code-based] Path to JSON file with 3P library config (same format as --3p-template-json)'
+      )
       .option(
         '--config <path>',
         'Path to evaluator config JSON file (overrides --model, --instructions, --rating-scale) [non-interactive]'
@@ -200,6 +366,8 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
           ratingScale?: string;
           lambdaArn?: string;
           timeout?: string;
+          '3pTemplateJson'?: string;
+          '3pTemplateJsonFile'?: string;
           config?: string;
           kmsKeyArn?: string;
           json?: boolean;
@@ -224,7 +392,94 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
                 fail(`Invalid --level "${cliOptions.level}". Must be one of: SESSION, TRACE, TOOL_CALL`);
               }
 
-              const evalType = cliOptions.type ?? 'llm-as-a-judge';
+              // Parse --3p-template-json or --3p-template-json-file
+              if (cliOptions['3pTemplateJson'] && cliOptions['3pTemplateJsonFile']) {
+                fail('--3p-template-json and --3p-template-json-file cannot be used together');
+              }
+              let templateJsonStr: string | undefined;
+              if (cliOptions['3pTemplateJson']) {
+                templateJsonStr = cliOptions['3pTemplateJson'];
+              } else if (cliOptions['3pTemplateJsonFile']) {
+                if (!existsSync(cliOptions['3pTemplateJsonFile'])) {
+                  fail(`--3p-template-json-file not found: ${cliOptions['3pTemplateJsonFile']}`);
+                }
+                templateJsonStr = readFileSync(cliOptions['3pTemplateJsonFile'], 'utf-8');
+              }
+
+              let threePLibrary: ThirdPartyLibrary | undefined;
+              let threePMetric: string | undefined;
+              let threePModelProvider: ModelProvider | undefined;
+              let threePModel: string | undefined;
+              let threePParams: string | undefined;
+
+              if (templateJsonStr) {
+                let templateObj: Record<string, unknown>;
+                try {
+                  templateObj = JSON.parse(templateJsonStr) as Record<string, unknown>;
+                } catch {
+                  throw new Error('--3p-template-json must be valid JSON');
+                }
+                if (!templateObj.library || typeof templateObj.library !== 'string') {
+                  fail('--3p-template-json must include "library" (e.g. "deepeval" or "autoevals")');
+                }
+                if (!templateObj.metric || typeof templateObj.metric !== 'string') {
+                  fail('--3p-template-json must include "metric" (e.g. "AnswerRelevancyMetric")');
+                }
+                const rawLibrary = String(templateObj.library);
+                if (!isSupportedLibrary(rawLibrary)) {
+                  fail(`Invalid library "${rawLibrary}". Supported: ${SUPPORTED_LIBRARIES.join(', ')}`);
+                }
+                threePLibrary = rawLibrary as ThirdPartyLibrary;
+                threePMetric = templateObj.metric as string;
+                if (templateObj.modelProvider) {
+                  const rawProvider = templateObj.modelProvider as string;
+                  if (!isSupportedModelProvider(rawProvider)) {
+                    fail(`Invalid modelProvider "${rawProvider}". Supported: ${MODEL_PROVIDERS.join(', ')}`);
+                  }
+                  threePModelProvider = rawProvider as ModelProvider;
+                }
+                if (templateObj.model) threePModel = templateObj.model as string;
+                if (templateObj.params && typeof templateObj.params === 'object') {
+                  try {
+                    threePParams = Object.entries(templateObj.params as Record<string, unknown>)
+                      .map(([k, v]) => {
+                        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+                          throw new Error(`Invalid Python kwarg name "${k}"`);
+                        }
+                        return `${k}=${jsonToPythonValue(v)}`;
+                      })
+                      .join(', ');
+                  } catch (e) {
+                    fail(`Invalid params in --3p-template-json: ${getErrorMessage(e)}`);
+                  }
+                }
+                // Default modelProvider to 'bedrock' only when model is provided
+                if (!threePModelProvider && threePModel) {
+                  threePModelProvider = 'bedrock';
+                }
+                if (threePModelProvider === 'bedrock' && !threePModel) {
+                  fail(
+                    '--3p-template-json requires "model" when modelProvider is bedrock. ' +
+                      'Pass a Bedrock inference profile ID (e.g. us.anthropic.claude-sonnet-4-20250514-v1:0)'
+                  );
+                }
+                if (threePModelProvider === 'openai') {
+                  console.warn(
+                    '\n  ⚠️  OpenAI model provider selected. You must set OPENAI_API_KEY as a Lambda ' +
+                      'environment variable after deployment.\n'
+                  );
+                }
+              }
+
+              if (cliOptions.timeout) {
+                const timeoutVal = parseInt(cliOptions.timeout, 10);
+                if (isNaN(timeoutVal) || timeoutVal < 1 || timeoutVal > 300) {
+                  fail('--timeout must be an integer between 1 and 300');
+                }
+              }
+
+              // Default --type to code-based when 3P template is provided
+              const evalType = cliOptions.type ?? (threePLibrary ? 'code-based' : 'llm-as-a-judge');
               if (evalType !== 'llm-as-a-judge' && evalType !== 'code-based') {
                 fail(`Invalid --type "${evalType}". Must be one of: llm-as-a-judge, code-based`);
               }
@@ -233,17 +488,28 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
               if (evalType !== 'code-based') {
                 if (cliOptions.lambdaArn) fail('--lambda-arn requires --type code-based');
                 if (cliOptions.timeout) fail('--timeout requires --type code-based');
+                if (threePLibrary) fail('--3p-template-json requires --type code-based');
               }
-              if (evalType === 'code-based') {
+              if (evalType === 'code-based' && !threePLibrary) {
                 if (cliOptions.model) fail('--model cannot be used with --type code-based');
                 if (cliOptions.instructions) fail('--instructions cannot be used with --type code-based');
                 if (cliOptions.ratingScale) fail('--rating-scale cannot be used with --type code-based');
               }
 
               let configJson: EvaluatorConfig;
+              let thirdParty: ThirdPartyLibraryOptions | undefined;
 
-              if (cliOptions.config) {
-                const { readFileSync } = await import('fs');
+              if (threePLibrary) {
+                const libraryConfig = THIRD_PARTY_EVALUATOR_LIBRARIES[threePLibrary];
+                configJson = this.buildThirdPartyConfig(cliOptions.name!, libraryConfig, cliOptions.timeout);
+                thirdParty = {
+                  library: threePLibrary,
+                  metricClass: threePMetric!,
+                  metricParams: threePParams,
+                  modelProvider: threePModelProvider,
+                  model: threePModel,
+                };
+              } else if (cliOptions.config) {
                 configJson = JSON.parse(readFileSync(cliOptions.config, 'utf-8')) as EvaluatorConfig;
               } else if (evalType === 'code-based') {
                 configJson = this.buildCodeBasedConfig(cliOptions.name!, cliOptions.lambdaArn, cliOptions.timeout);
@@ -306,6 +572,7 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
                 level: levelResult.data!,
                 config: configJson,
                 kmsKeyArn: cliOptions.kmsKeyArn,
+                thirdParty,
               });
 
               if (!result.success) {
@@ -324,6 +591,20 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
                   );
                 } else {
                   console.log(`Added evaluator '${result.evaluatorName}'`);
+                }
+
+                if (thirdParty) {
+                  const libraryConfig = THIRD_PARTY_EVALUATOR_LIBRARIES[thirdParty.library];
+                  const warnings = getWarningsForMetric(libraryConfig, thirdParty.metricClass);
+                  for (const warning of warnings) {
+                    console.warn(`\n  ${warning}`);
+                  }
+                  if (thirdParty.modelProvider === 'openai') {
+                    console.warn(
+                      '\n  ⚠️  OpenAI model provider selected. You must set OPENAI_API_KEY as a Lambda ' +
+                        'environment variable for the evaluator to call the LLM judge.'
+                    );
+                  }
                 }
               }
 
@@ -377,6 +658,24 @@ export class EvaluatorPrimitive extends BasePrimitive<AddEvaluatorOptions, Remov
     }
 
     const timeoutSeconds = timeoutStr ? parseInt(timeoutStr, 10) : DEFAULT_CODE_TIMEOUT;
+    return {
+      codeBased: {
+        managed: {
+          codeLocation: `app/${name}/`,
+          entrypoint: DEFAULT_CODE_ENTRYPOINT,
+          timeoutSeconds,
+          additionalPolicies: ['execution-role-policy.json'],
+        },
+      },
+    };
+  }
+
+  private buildThirdPartyConfig(
+    name: string,
+    libraryConfig: ThirdPartyLibraryConfig,
+    timeoutStr?: string
+  ): EvaluatorConfig {
+    const timeoutSeconds = timeoutStr ? parseInt(timeoutStr, 10) : libraryConfig.defaultTimeoutSeconds;
     return {
       codeBased: {
         managed: {

@@ -10,3 +10,22 @@ export async function renderCodeBasedEvaluatorTemplate(evaluatorName: string, ou
   const templateDir = getTemplatePath('evaluators', 'python-lambda');
   await copyAndRenderDir(templateDir, outputDir, { Name: evaluatorName });
 }
+
+export interface ThirdPartyEvaluatorTemplateData {
+  Name: string;
+  EvaluatorClass: string;
+  EvaluatorParams: string;
+  /** True when the LLM judge runs on Bedrock instead of the library's default (OpenAI). */
+  ModelProviderBedrock?: boolean;
+  /** Bedrock model ID (required when ModelProviderBedrock is true). */
+  Model?: string;
+}
+
+export async function renderThirdPartyEvaluatorTemplate(
+  templateDirName: string,
+  data: ThirdPartyEvaluatorTemplateData,
+  outputDir: string
+): Promise<void> {
+  const templateDir = getTemplatePath('evaluators', templateDirName);
+  await copyAndRenderDir(templateDir, outputDir, data);
+}
